@@ -1,65 +1,107 @@
 # Anime BGC
 
-A dark, cinematic **anime streaming website frontend**, with a design inspired by [miruro.tv](https://www.miruro.tv). This repository currently contains the **frontend only** — the API and backend are planned for a later stage.
+A dark, cinematic **full-stack anime streaming app**, with a design inspired by
+[miruro.tv](https://www.miruro.tv). The frontend is wired to a lightweight
+Node/TypeScript backend that pulls **live catalog data from AniList** and **live
+episodes + streaming sources via the Miruro pipe API**, played in-browser with
+an HLS video player.
 
-> Status: Frontend / UI complete. Content shown is mock data. Streaming, search, accounts, and notifications are placeholders until the backend is connected.
+> Status: **Live.** Home, search, browse and the watch/player flow all run on
+> real data. Streams that require a hot-link `Referer` are routed through a
+> built-in server-side proxy so they play directly in the browser.
 
 ## Features
 
-- **Hero carousel** — auto-rotating featured anime with airing badge, meta chips, genres, synopsis and call-to-action buttons.
-- **Genre bar** — horizontally scrollable genre pills.
-- **Tabbed grid** — Newest / Popular / Top Rated with pagination.
-- **Top Airing sidebar** — ranked list with thumbnails and scores.
-- **Trending & Movies rows** — horizontal poster carousels.
-- **Watch / detail page** — banner, episode list and player placeholder.
-- **Browse pages** — Trending, Schedule (day picker), Search (live filter) and Watchlist.
+- **Hero carousel** — live trending anime with airing badge, meta chips, genres, synopsis and CTAs.
+- **Tabbed grid** — Newest / Popular / Top Rated (live AniList) with pagination.
+- **Top Airing sidebar** — live currently-airing ranking.
+- **Trending & Movies rows** — live horizontal poster carousels.
+- **Search** — live AniList search synced to the URL (`/search?q=`), debounced.
+- **Watch / detail page** — live banner + synopsis, full episode list (real titles),
+  **sub/dub toggle**, **streaming-server selector**, and an **HLS player** with
+  automatic provider fallback.
+- **Watchlist** — add/remove, persisted in `localStorage`.
 - **Responsive** layout with a mobile drawer, sticky blurred navbar and tasteful motion.
 
 ## Tech Stack
 
-- **React 19** + **TypeScript**
-- **Vite** build tooling
-- **Tailwind CSS 4** with a custom dark theme (lavender accent `#b5a8ff`)
-- **wouter** for client-side routing
-- **shadcn/ui**, **lucide-react** icons, **sonner** toasts
+- **React 19** + **TypeScript**, **Vite** build tooling
+- **Tailwind CSS 4** custom dark theme (lavender accent `#b5a8ff`)
+- **wouter** routing, **lucide-react** icons, **sonner** toasts
+- **hls.js** for adaptive HLS playback
+- **Express** (production) / **Vite dev middleware** (development) exposing the same `/api/*` routes
+
+## Data Sources
+
+| Source | Used for |
+|--------|----------|
+| **AniList GraphQL** (`graphql.anilist.co`) | trending, popular, top-rated, newest, search, anime info |
+| **Miruro secure pipe** (`miruro.tv/api/secure/pipe`) | episode lists (per provider) + streaming sources |
+
+The Miruro pipe protocol is reimplemented in pure Node (no Python): requests are
+base64url-encoded JSON; responses are base64url → gzip → JSON. See
+`server/lib/miruro.ts`.
+
+## API Endpoints
+
+All served under `/api` by both the dev middleware and the production server:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/trending` | Trending anime (paged) |
+| `GET /api/popular` | Most popular |
+| `GET /api/top-rated` | Highest rated |
+| `GET /api/recent` | Newest / recently added |
+| `GET /api/airing` | Currently airing |
+| `GET /api/search?q=` | Search by title/genre |
+| `GET /api/info/:id` | Full anime details |
+| `GET /api/episodes/:id` | Episode lists grouped by provider (sub + dub) |
+| `GET /api/sources?episodeId=&provider=&anilistId=&category=` | Streaming sources for an episode |
+| `GET /api/proxy?url=&referer=` | Server-side stream proxy (rewrites m3u8 + forwards Referer) |
 
 ## Project Structure
 
 ```
 client/
   src/
-    components/   <- Header, HeroCarousel, AnimeCard, CarouselRow, TopAiring, AnimeGrid, GenreBar, PromoStrip, Footer
+    components/   <- Header, HeroCarousel, AnimeCard, CarouselRow, TopAiring,
+                     AnimeGrid, GenreBar, Footer, Skeletons, VideoPlayer
     pages/        <- Home, Watch, Browse (Trending/Search/Schedule/Watchlist), NotFound
-    lib/          <- animeData.ts (mock data, replace with API later)
-    index.css     <- global dark theme tokens
-server/           <- placeholder (no backend yet)
+    lib/          <- api.ts (fetch layer + hooks), watchlist.ts, animeData.ts (UI constants)
+server/
+  lib/
+    anilist.ts    <- AniList GraphQL client (mapped to the shared Anime shape)
+    miruro.ts     <- Miruro pipe client (episodes + sources, provider priority)
+    proxy.ts      <- HLS/segment stream proxy
+  api.ts          <- framework-agnostic request handler (JSON + binary proxy)
+  index.ts        <- Express production server
+shared/
+  anime.ts        <- types shared by client + server (Anime, Episode, sources…)
 ```
 
 ## Getting Started
 
 ```bash
-# install dependencies (uses pnpm)
-pnpm install
-
-# start the dev server
-pnpm dev
-
-# type-check
-pnpm check
-
-# production build
-pnpm build
+pnpm install      # install dependencies
+pnpm dev          # dev server at http://localhost:3000 (API included)
+pnpm check        # type-check
+pnpm build        # production build
+pnpm start        # run the production server
 ```
 
-The app runs at `http://localhost:3000`.
+## How playback works
 
-## Roadmap
+1. `GET /api/info/:id` and `GET /api/episodes/:id` load details + the per-provider
+   episode map (providers are ordered by tested reliability).
+2. Selecting an episode calls `GET /api/sources`; if a provider yields no playable
+   stream the client automatically falls back to the next provider.
+3. The chosen HLS URL is played through `GET /api/proxy`, which fetches the
+   playlist server-side with the required `Referer`, rewrites every segment/variant
+   URL back through the proxy, and streams it to `hls.js`.
 
-- [ ] Connect a real anime data API (catalog, episodes, search)
-- [ ] Build the backend (accounts, watchlist persistence, notifications)
-- [ ] Integrate a video player and streaming sources
-- [ ] Real airing schedule data
+## Notes / Disclaimer
 
-## Notes
-
-All anime titles, posters and synopses in `client/src/lib/animeData.ts` are **placeholder/demo content** for design purposes only.
+This is a technical demo that aggregates publicly reachable third-party APIs.
+Upstream providers may rate-limit, change, or block requests at any time, so
+availability of any specific title or stream is not guaranteed. Intended for
+educational and personal use.

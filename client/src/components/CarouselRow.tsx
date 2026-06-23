@@ -5,7 +5,7 @@
 import { useRef } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Anime } from "@/lib/animeData";
+import type { Anime } from "@shared/anime";
 import AnimeCard from "./AnimeCard";
 
 export default function CarouselRow({

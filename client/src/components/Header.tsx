@@ -8,6 +8,7 @@ import { Link, useLocation } from "wouter";
 import { Menu, Search, Shuffle, Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import { LOGO, featured } from "@/lib/animeData";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -31,6 +32,7 @@ function Wordmark() {
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [term, setTerm] = useState("");
   const [, navigate] = useLocation();
 
   useEffect(() => {
@@ -47,12 +49,21 @@ export default function Header() {
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/search");
+    const q = term.trim();
+    navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
   };
 
-  const shuffle = () => {
-    const pick = featured[Math.floor(Math.random() * featured.length)];
-    navigate(`/watch/${pick.id}`);
+  const shuffle = async () => {
+    try {
+      const page = Math.floor(Math.random() * 5) + 1;
+      const res = await api.trending(page, 24);
+      const pool = res.results.length ? res.results : featured;
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      navigate(`/watch/${pick.id}`);
+    } catch {
+      const pick = featured[Math.floor(Math.random() * featured.length)];
+      navigate(`/watch/${pick.id}`);
+    }
   };
 
   return (
@@ -83,8 +94,9 @@ export default function Header() {
           <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
             placeholder="Search anime, studios, genres…"
-            onFocus={() => {}}
             className="h-10 w-full rounded-full border border-border bg-white/5 pl-10 pr-16 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary/50 focus:bg-white/[0.07] focus:ring-2 focus:ring-primary/25"
           />
           <kbd className="absolute right-3 hidden items-center gap-0.5 rounded-md border border-border bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground lg:flex">

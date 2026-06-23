@@ -4,7 +4,7 @@
  */
 import { Link } from "wouter";
 import { Play, Star } from "lucide-react";
-import type { Anime } from "@/lib/animeData";
+import type { Anime } from "@shared/anime";
 import { cn } from "@/lib/utils";
 
 const typeLabel: Record<string, string> = {
@@ -44,10 +44,12 @@ export default function AnimeCard({
         </span>
 
         {/* score badge */}
-        <span className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm">
-          <Star className="h-3 w-3 fill-amber-300" />
-          {(anime.score / 10).toFixed(1)}
-        </span>
+        {anime.score > 0 && (
+          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm">
+            <Star className="h-3 w-3 fill-amber-300" />
+            {(anime.score / 10).toFixed(1)}
+          </span>
+        )}
 
         {/* hover play overlay */}
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -59,8 +61,8 @@ export default function AnimeCard({
         {/* bottom meta strip */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2.5 pt-8">
           <div className="flex items-center gap-2 text-[11px] text-white/70">
-            <span>{anime.year}</span>
-            <span className="h-1 w-1 rounded-full bg-white/40" />
+            {anime.year > 0 && <span>{anime.year}</span>}
+            {anime.year > 0 && <span className="h-1 w-1 rounded-full bg-white/40" />}
             <span>{anime.episodes} eps</span>
           </div>
         </div>

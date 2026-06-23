@@ -203,7 +203,50 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+// =============================================================================
+// Anime BGC API - Vite dev middleware
+// Serves /api/* (AniList + Miruro) during development by delegating to the
+// same handler the production Express server uses.
+// =============================================================================
+function vitePluginAnimeApi(): Plugin {
+  return {
+    name: "anime-bgc-api",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api", async (req, res) => {
+        try {
+          const { handleApi, handleProxy } = await server.ssrLoadModule(
+            path.join(PROJECT_ROOT, "server/api.ts"),
+          );
+          const fullUrl = `/api${req.url ?? ""}`;
+          // Binary stream proxy (m3u8 / segments) takes priority.
+          const proxied = await handleProxy(fullUrl);
+          if (proxied) {
+            res.statusCode = proxied.status;
+            for (const [k, v] of Object.entries(proxied.headers)) res.setHeader(k, v as string);
+            res.end(proxied.body);
+            return;
+          }
+          const result = await handleApi(req.method ?? "GET", fullUrl);
+          if (!result) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: "Not found" }));
+            return;
+          }
+          res.statusCode = result.status;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Cache-Control", "no-store");
+          res.end(JSON.stringify(result.body));
+        } catch (e) {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+      });
+    },
+  };
+}
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginAnimeApi()];
 
 export default defineConfig({
   plugins,

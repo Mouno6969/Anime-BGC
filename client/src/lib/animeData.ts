@@ -1,7 +1,12 @@
 /**
- * ANIME BGC — mock data (frontend only, no API yet).
- * Replace these arrays with real API responses later.
+ * ANIME BGC — mock data + UI constants.
+ * Live data now comes from the backend (see lib/api.ts). This file keeps the
+ * shared `Anime` type (re-exported) plus a few static UI constants (LOGO,
+ * genres, scheduleDays) and demo arrays still used as graceful fallbacks.
  */
+import type { Anime as SharedAnime, MediaType as SharedMediaType } from "@shared/anime";
+export type Anime = SharedAnime;
+export type { MediaType } from "@shared/anime";
 
 const CDN = "https://d2xsxph8kpxj0f.cloudfront.net/310519663772861672/dGtWumMEybNb6qqzta3Ciu";
 
@@ -28,24 +33,6 @@ export const posters = {
   p10: `${CDN}/p10-cxj8vG5BqZnzfEFTDzvbxg.webp`,
 };
 
-export type MediaType = "TV" | "MOVIE" | "ONA" | "TV_SHORT" | "OVA";
-
-export interface Anime {
-  id: number;
-  title: string;
-  poster: string;
-  banner: string;
-  type: MediaType;
-  year: number;
-  episodes: number;
-  totalEpisodes?: number;
-  score: number; // 0-100
-  duration: string;
-  genres: string[];
-  studio: string;
-  synopsis: string;
-  airingLabel?: string;
-}
 
 export const genres = [
   "Action",
@@ -159,7 +146,7 @@ function mk(
   id: number,
   title: string,
   poster: string,
-  type: MediaType,
+  type: SharedMediaType,
   year: number,
   episodes: number,
   score: number,
