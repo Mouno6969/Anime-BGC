@@ -38,8 +38,9 @@ an HLS video player.
 | **AniList GraphQL** (`graphql.anilist.co`) | trending, popular, top-rated, newest, search, anime info |
 | **Miruro secure pipe** (`miruro.tv/api/secure/pipe`) | episode lists (per provider) + streaming sources |
 
-The Miruro pipe protocol is reimplemented in pure Node (no Python): requests are
-base64url-encoded JSON; responses are base64url → gzip → JSON. See
+The Node server delegates Miruro extraction to a local Python Miruro-API service
+(`MIRURO_API_URL`, default `http://127.0.0.1:8788`) because that service uses
+`curl_cffi` Chrome TLS fingerprinting for Miruro's Cloudflare-protected pipe. See
 `server/lib/miruro.ts`.
 
 ## API Endpoints
@@ -71,7 +72,7 @@ client/
 server/
   lib/
     anilist.ts    <- AniList GraphQL client (mapped to the shared Anime shape)
-    miruro.ts     <- Miruro pipe client (episodes + sources, provider priority)
+    miruro.ts     <- Miruro extractor client (talks to local Python Miruro-API)
     proxy.ts      <- HLS/segment stream proxy
   api.ts          <- framework-agnostic request handler (JSON + binary proxy)
   index.ts        <- Express production server
@@ -83,11 +84,15 @@ shared/
 
 ```bash
 pnpm install      # install dependencies
-pnpm dev          # dev server at http://localhost:3000 (API included)
+cp .env.example .env  # optional; set PORT and MIRURO_API_URL
+pnpm dev          # dev server (API included)
 pnpm check        # type-check
 pnpm build        # production build
-pnpm start        # run the production server
+PORT=3102 MIRURO_API_URL=http://127.0.0.1:8788 pnpm start
 ```
+
+For reliable stream extraction, run the Python Miruro-API service separately and
+point `MIRURO_API_URL` at it. On this VPS it is running on `127.0.0.1:8788`.
 
 ## How playback works
 

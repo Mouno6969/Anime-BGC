@@ -1,15 +1,10 @@
 /**
- * Miruro streaming client (Node/TypeScript).
+ * Miruro streaming client (Node/TypeScript) backed by the local Python
+ * Miruro-API service. The Python service uses curl_cffi Chrome TLS
+ * fingerprinting, which is required for Miruro's Cloudflare-protected pipe.
  *
- * Miruro's frontend talks to its backend through a `secure/pipe` tunnel:
- *   request  -> JSON payload, base64url-encoded, passed as `?e=...`
- *   response -> base64url string -> gzip-decompress -> JSON
- * Episode IDs inside the response are themselves base64url-encoded.
- *
- * This module replicates that protocol with zero external dependencies
- * (Node's built-in `zlib` + `Buffer`).
+ * Set MIRURO_API_URL to override the local extractor base URL.
  */
-import { gunzipSync } from "node:zlib";
 import type {
   Episode,
   EpisodesResult,
@@ -19,114 +14,27 @@ import type {
   SubtitleTrack,
 } from "../../shared/anime.js";
 
-const PIPE_URL = "https://www.miruro.tv/api/secure/pipe";
-const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-  Referer: "https://www.miruro.tv/",
-};
+const MIRURO_API_URL = (process.env.MIRURO_API_URL || "http://127.0.0.1:8788").replace(/\/$/, "");
 
-/**
- * Provider priority (best first). Ordered by streams that reliably fetch +
- * proxy as playable HLS in testing (ally/pewe/bee/kiwi/bonk), with the rest
- * after as fallbacks.
- */
+/** Provider priority (best first), matching the frontend fallback order. */
 const PROVIDER_PRIORITY = ["ally", "pewe", "bee", "kiwi", "bonk", "moo", "hop", "zoro"];
 
-function b64urlEncode(s: string): string {
-  return Buffer.from(s, "utf-8").toString("base64url");
-}
-
-function b64urlDecodeToBuffer(s: string): Buffer {
-  return Buffer.from(s, "base64url");
-}
-
-function encodePipeRequest(payload: unknown): string {
-  return b64urlEncode(JSON.stringify(payload));
-}
-
-function decodePipeResponse(encoded: string): any {
-  const compressed = b64urlDecodeToBuffer(encoded.trim());
-  const json = gunzipSync(compressed).toString("utf-8");
-  return JSON.parse(json);
-}
-
-/** Decode a base64url-encoded episode id back to plain text (if it looks encoded). */
-function translateId(eid: string): string {
-  try {
-    const decoded = Buffer.from(eid, "base64url").toString("utf-8");
-    return decoded.includes(":") ? decoded : eid;
-  } catch {
-    return eid;
-  }
-}
-
-/** Recursively decode any base64url `id` fields inside a JSON tree. */
-function deepTranslate(obj: any): void {
-  if (Array.isArray(obj)) {
-    for (const item of obj) deepTranslate(item);
-  } else if (obj && typeof obj === "object") {
-    for (const key of Object.keys(obj)) {
-      const value = obj[key];
-      if (key === "id" && typeof value === "string") {
-        obj[key] = translateId(value);
-      } else if (value && typeof value === "object") {
-        deepTranslate(value);
-      }
-    }
-  }
-}
-
-async function pipeGet(payload: unknown): Promise<any> {
-  const e = encodePipeRequest(payload);
-  const res = await fetch(`${PIPE_URL}?e=${e}`, { headers: HEADERS });
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${MIRURO_API_URL}${path}`);
   if (!res.ok) {
-    throw new Error(`Miruro pipe request failed (${res.status})`);
+    let detail = "";
+    try {
+      const data: any = await res.json();
+      detail = typeof data?.detail === "string" ? data.detail : data?.error || "";
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    throw new Error(detail || `Miruro API request failed (${res.status})`);
   }
-  const text = await res.text();
-  return decodePipeResponse(text);
+  return (await res.json()) as T;
 }
 
-interface RawEpisode {
-  id: string;
-  number: number;
-  title?: string;
-  image?: string;
-  airDate?: string;
-  duration?: number;
-  description?: string;
-  filler?: boolean;
-}
-
-async function fetchRawEpisodes(anilistId: number): Promise<any> {
-  const payload = {
-    path: "episodes",
-    method: "GET",
-    query: { anilistId },
-    body: null,
-    version: "0.1.0",
-  };
-  const data = await pipeGet(payload);
-  deepTranslate(data);
-  return data;
-}
-
-function pickProvider(providers: Record<string, any>): string | null {
-  const names = Object.keys(providers);
-  if (names.length === 0) return null;
-  for (const p of PROVIDER_PRIORITY) {
-    const pd = providers[p];
-    const sub = pd?.episodes?.sub;
-    if (Array.isArray(sub) && sub.length > 0) return p;
-  }
-  // fall back to the first provider that has any sub episodes
-  for (const p of names) {
-    const sub = providers[p]?.episodes?.sub;
-    if (Array.isArray(sub) && sub.length > 0) return p;
-  }
-  return names[0];
-}
-
-function normaliseEpisode(e: RawEpisode): Episode {
+function normaliseEpisode(e: any): Episode {
   return {
     id: e.id,
     number: e.number,
@@ -140,45 +48,34 @@ function normaliseEpisode(e: RawEpisode): Episode {
 }
 
 export async function getEpisodes(anilistId: number): Promise<EpisodesResult> {
-  const data = await fetchRawEpisodes(anilistId);
-  const providers: Record<string, any> = data?.providers ?? {};
-  const provider = pickProvider(providers);
-  if (!provider) {
-    return {
-      anilistId,
-      provider: "",
-      providers: [],
-      hasDub: false,
-      episodes: [],
-      dubEpisodes: [],
-      byProvider: [],
-    };
-  }
-
-  // Build a per-provider map, ordered by our quality priority.
+  const data = await getJson<any>(`/episodes/${anilistId}`);
+  const providers = data?.providers ?? {};
   const orderedNames = [
     ...PROVIDER_PRIORITY.filter((p) => providers[p]),
     ...Object.keys(providers).filter((p) => !PROVIDER_PRIORITY.includes(p)),
   ];
+
   const byProvider: ProviderEpisodes[] = orderedNames.map((name) => {
     const eps = providers[name]?.episodes ?? {};
-    const sub: RawEpisode[] = Array.isArray(eps.sub) ? eps.sub : [];
-    const dub: RawEpisode[] = Array.isArray(eps.dub) ? eps.dub : [];
-    return {
-      provider: name,
-      sub: sub.map(normaliseEpisode),
-      dub: dub.map(normaliseEpisode),
-    };
+    const sub: any[] = Array.isArray(eps.sub) ? eps.sub : [];
+    const dub: any[] = Array.isArray(eps.dub) ? eps.dub : [];
+    return { provider: name, sub: sub.map(normaliseEpisode), dub: dub.map(normaliseEpisode) };
   });
 
-  const chosen = byProvider.find((p) => p.provider === provider) ?? byProvider[0];
+  const chosen =
+    PROVIDER_PRIORITY.map((name) => byProvider.find((p) => p.provider === name)).find(
+      (p) => p && p.sub.length > 0,
+    ) ??
+    byProvider.find((p) => p.sub.length > 0) ??
+    byProvider[0];
+
   return {
     anilistId,
-    provider: chosen.provider,
-    providers: orderedNames,
-    hasDub: chosen.dub.length > 0,
-    episodes: chosen.sub,
-    dubEpisodes: chosen.dub,
+    provider: chosen?.provider ?? "",
+    providers: byProvider.map((p) => p.provider),
+    hasDub: (chosen?.dub.length ?? 0) > 0,
+    episodes: chosen?.sub ?? [],
+    dubEpisodes: chosen?.dub ?? [],
     byProvider,
   };
 }
@@ -189,19 +86,20 @@ export async function getSources(
   anilistId: number,
   category: "sub" | "dub" = "sub",
 ): Promise<SourcesResult> {
-  const encId = b64urlEncode(episodeId);
-  const payload = {
-    path: "sources",
-    method: "GET",
-    query: { episodeId: encId, provider, category, anilistId },
-    body: null,
-    version: "0.1.0",
-  };
-  const data = await pipeGet(payload);
+  // Episodes returned by the local Miruro API already contain a direct watch path
+  // like watch/ally/20/sub/allmanga-1. Prefer that endpoint when present.
+  const data = episodeId.startsWith("watch/")
+    ? await getJson<any>(`/${episodeId}`)
+    : await getJson<any>(
+        `/sources?episodeId=${encodeURIComponent(episodeId)}&provider=${encodeURIComponent(
+          provider,
+        )}&anilistId=${anilistId}&category=${category}`,
+      );
+
   const streams: StreamSource[] = Array.isArray(data?.streams)
     ? data.streams.map((s: any) => ({
         url: s.url,
-        type: s.type ?? "hls",
+        type: s.type ?? (String(s.url || "").includes(".m3u8") ? "hls" : "mp4"),
         quality: s.quality,
         server: s.server,
         referer: s.referer,
@@ -210,10 +108,6 @@ export async function getSources(
   const subtitles: SubtitleTrack[] = Array.isArray(data?.subtitles)
     ? data.subtitles.map((s: any) => ({ file: s.file ?? s.url, label: s.label, kind: s.kind }))
     : [];
-  return {
-    streams,
-    subtitles,
-    intro: data?.intro,
-    outro: data?.outro,
-  };
+
+  return { streams, subtitles, intro: data?.intro, outro: data?.outro };
 }
