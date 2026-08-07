@@ -31,7 +31,11 @@ export default function VideoPlayer({
   const hideControlsTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      setIsFullscreen(active);
+      if (!active) setControlsVisible(false);
+    };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
@@ -52,11 +56,15 @@ export default function VideoPlayer({
     };
   }, []);
 
-  const revealControls = () => {
-    if (!isLandscape) return;
+  const showControls = () => {
     setControlsVisible(true);
     if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
     hideControlsTimer.current = window.setTimeout(() => setControlsVisible(false), 4000);
+  };
+
+  const revealControls = () => {
+    if (!isLandscape && !isFullscreen) return;
+    showControls();
   };
 
   const toggleFullscreen = async () => {
@@ -72,10 +80,12 @@ export default function VideoPlayer({
       }
       if (container?.requestFullscreen) {
         await container.requestFullscreen();
+        showControls();
         return;
       }
       if (video?.webkitEnterFullscreen) video.webkitEnterFullscreen();
       else if (video?.webkitRequestFullscreen) await video.webkitRequestFullscreen();
+      showControls();
     } catch {
       setError("Fullscreen is not available in this browser.");
     }
@@ -163,7 +173,7 @@ export default function VideoPlayer({
           : "relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black"
       }
     >
-      {isLandscape && controlsVisible && (
+      {(isLandscape || isFullscreen) && controlsVisible && (
       <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
         <button
           type="button"
@@ -191,6 +201,7 @@ export default function VideoPlayer({
         ref={videoRef}
         poster={poster}
         controls
+        controlsList="nofullscreen"
         playsInline
         crossOrigin="anonymous"
         className="h-full w-full"
