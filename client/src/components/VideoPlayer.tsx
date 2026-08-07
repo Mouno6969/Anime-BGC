@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Expand } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Expand, Gauge, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import type { StreamSource, SubtitleTrack } from "@shared/anime";
 
@@ -29,6 +29,14 @@ export default function VideoPlayer({
   const [isLandscape, setIsLandscape] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const hideControlsTimer = useRef<number | null>(null);
+  // HLS quality variants (resolution + bitrate) from the master playlist.
+  const [qualityLevels, setQualityLevels] = useState<
+    { index: number; height: number; bitrate: number }[]
+  >([]);
+  const [quality, setQuality] = useState(-1); // -1 = Auto (ABR)
+  const [autoLevel, setAutoLevel] = useState(-1); // level currently played while Auto
+  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
+  const hlsRef = useRef<Hls | null>(null);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -64,6 +72,22 @@ export default function VideoPlayer({
 
   const revealControls = () => {
     if (!isLandscape && !isFullscreen) return;
+    showControls();
+  };
+
+  // Close the quality menu whenever the control overlay hides.
+  useEffect(() => {
+    if (!controlsVisible) setQualityMenuOpen(false);
+  }, [controlsVisible]);
+
+  const formatBitrate = (bps: number) =>
+    bps >= 1_000_000 ? `${(bps / 1_000_000).toFixed(1)} Mbps` : `${Math.round(bps / 1000)} kbps`;
+
+  const selectQuality = (index: number) => {
+    const hls = hlsRef.current;
+    if (hls) hls.currentLevel = index; // -1 restores Auto (ABR)
+    setQuality(index);
+    setQualityMenuOpen(false);
     showControls();
   };
 
@@ -116,12 +140,23 @@ export default function VideoPlayer({
 
     if (isHls && Hls.isSupported()) {
       hls = new Hls({ maxBufferLength: 30, enableWorker: true });
+      hlsRef.current = hls;
+      setQualityLevels([]);
+      setQuality(-1);
+      setAutoLevel(-1);
+      setQualityMenuOpen(false);
       hls.loadSource(playUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
+        const lvls = (data.levels ?? [])
+          .map((l, index) => ({ index, height: l.height ?? 0, bitrate: l.bitrate ?? 0 }))
+          .filter((l) => l.height > 0)
+          .sort((a, b) => b.bitrate - a.bitrate);
+        setQualityLevels(lvls);
         setLoading(false);
         video.play().catch(() => {});
       });
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => setAutoLevel(data.level));
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
@@ -146,6 +181,7 @@ export default function VideoPlayer({
     return () => {
       video.removeEventListener("loadeddata", onReady);
       video.removeEventListener("canplay", onReady);
+      if (hlsRef.current === hls) hlsRef.current = null;
       if (hls) hls.destroy();
       video.removeAttribute("src");
       video.load();
@@ -175,6 +211,58 @@ export default function VideoPlayer({
     >
       {(isLandscape || isFullscreen) && controlsVisible && (
       <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+        {qualityLevels.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setQualityMenuOpen((o) => !o);
+                showControls();
+              }}
+              className="inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1.5 text-xs font-semibold text-white/90 backdrop-blur transition-colors hover:bg-black/80"
+              aria-label="Select video quality"
+              title="Select video quality"
+            >
+              <Gauge className="h-3.5 w-3.5" />
+              {quality === -1
+                ? "Auto"
+                : `${qualityLevels.find((l) => l.index === quality)?.height ?? ""}p`}
+            </button>
+            {qualityMenuOpen && (
+              <div className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#0d0d10]/95 py-1 text-xs shadow-2xl backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => selectQuality(-1)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
+                >
+                  <span className="font-semibold">Auto</span>
+                  <span className="flex items-center gap-1.5 text-white/50">
+                    {autoLevel >= 0 &&
+                      (() => {
+                        const cur = qualityLevels.find((l) => l.index === autoLevel);
+                        return cur ? `${cur.height}p • ${formatBitrate(cur.bitrate)}` : null;
+                      })()}
+                    {quality === -1 && <Check className="h-3.5 w-3.5 text-primary" />}
+                  </span>
+                </button>
+                {qualityLevels.map((l) => (
+                  <button
+                    key={l.index}
+                    type="button"
+                    onClick={() => selectQuality(l.index)}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
+                  >
+                    <span className="font-semibold">{l.height}p</span>
+                    <span className="flex items-center gap-1.5 text-white/50">
+                      {formatBitrate(l.bitrate)}
+                      {quality === l.index && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setFitMode((mode) => (mode === "contain" ? "cover" : "contain"))}
