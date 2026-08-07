@@ -201,7 +201,9 @@ export default function VideoPlayer({
         ref={videoRef}
         poster={poster}
         controls
-        controlsList="nofullscreen"
+        controlsList="nofullscreen nodownload noplaybackrate noremoteplayback"
+        disablePictureInPicture
+        disableRemotePlayback
         playsInline
         crossOrigin="anonymous"
         className="h-full w-full"
