@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Expand } from "lucide-react";
 import { api } from "@/lib/api";
 import type { StreamSource, SubtitleTrack } from "@shared/anime";
 
@@ -21,8 +21,39 @@ export default function VideoPlayer({
   poster?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fitMode, setFitMode] = useState<"contain" | "cover">("contain");
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const container = containerRef.current;
+    const video = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    }) | null;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (container?.requestFullscreen) {
+        await container.requestFullscreen();
+        return;
+      }
+      if (video?.webkitEnterFullscreen) video.webkitEnterFullscreen();
+      else if (video?.webkitRequestFullscreen) await video.webkitRequestFullscreen();
+    } catch {
+      setError("Fullscreen is not available in this browser.");
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -97,7 +128,36 @@ export default function VideoPlayer({
   }
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
+    <div
+      ref={containerRef}
+      className={
+        isFullscreen
+          ? "relative h-screen w-screen overflow-hidden bg-black"
+          : "relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black"
+      }
+    >
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFitMode((mode) => (mode === "contain" ? "cover" : "contain"))}
+          className="inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1.5 text-xs font-semibold text-white/90 backdrop-blur transition-colors hover:bg-black/80"
+          aria-label="Toggle fit to screen"
+          title="Toggle fit to screen"
+        >
+          <Expand className="h-3.5 w-3.5" />
+          {fitMode === "contain" ? "Fit" : "Fill"}
+        </button>
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="inline-flex items-center gap-1 rounded-full bg-primary/90 px-3 py-1.5 text-xs font-semibold text-primary-foreground backdrop-blur transition-colors hover:bg-primary"
+          aria-label="Toggle fullscreen"
+          title="Toggle fullscreen"
+        >
+          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          {isFullscreen ? "Exit" : "Full"}
+        </button>
+      </div>
       <video
         ref={videoRef}
         poster={poster}
@@ -105,6 +165,7 @@ export default function VideoPlayer({
         playsInline
         crossOrigin="anonymous"
         className="h-full w-full"
+        style={{ objectFit: fitMode }}
       >
         {subtitles.map((s, i) => (
           <track
