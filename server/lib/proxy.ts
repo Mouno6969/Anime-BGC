@@ -14,11 +14,39 @@ export interface ProxyResult {
   body: Buffer;
 }
 
+/**
+ * Max bytes fetched per media request. Browsers seek MP4s with Range
+ * requests; capping each fetch keeps memory flat even for 300MB+ files.
+ * Clients transparently follow up with more range requests as needed.
+ */
+const MEDIA_CHUNK = 8 * 1024 * 1024; // 8 MiB
+
+/** Clamp a client Range header so a single upstream fetch stays bounded. */
+function capRange(range: string): string {
+  const trimmed = range.trim();
+  const span = /^bytes=(\d+)-(\d*)$/.exec(trimmed);
+  if (span) {
+    const start = parseInt(span[1], 10);
+    if (span[2]) {
+      const end = parseInt(span[2], 10);
+      if (end >= start && end - start + 1 <= MEDIA_CHUNK) return trimmed;
+    }
+    return `bytes=${start}-${start + MEDIA_CHUNK - 1}`;
+  }
+  const suffix = /^bytes=-(\d+)$/.exec(trimmed);
+  if (suffix) {
+    return parseInt(suffix[1], 10) <= MEDIA_CHUNK ? trimmed : `bytes=-${MEDIA_CHUNK}`;
+  }
+  return trimmed;
+}
+
 function buildHeaders(referer?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
     Accept: "*/*",
+    // Keep upstream Content-Length truthful (no transparent gzip re-encoding).
+    "Accept-Encoding": "identity",
   };
   if (referer) {
     headers.Referer = referer;
@@ -74,8 +102,21 @@ function rewritePlaylist(text: string, baseUrl: string, referer?: string): strin
     .join("\n");
 }
 
-export async function proxyStream(targetUrl: string, referer?: string): Promise<ProxyResult> {
-  const upstream = await fetch(targetUrl, { headers: buildHeaders(referer) });
+export async function proxyStream(
+  targetUrl: string,
+  referer?: string,
+  range?: string,
+): Promise<ProxyResult> {
+  const headers = buildHeaders(referer);
+  const playlist = targetUrl.includes(".m3u8");
+
+  // Media files (mp4/segments): always use a (capped) byte range so seeking
+  // works and a single fetch never buffers a whole episode into memory.
+  if (!playlist) {
+    headers.Range = range ? capRange(range) : `bytes=0-${MEDIA_CHUNK - 1}`;
+  }
+
+  const upstream = await fetch(targetUrl, { headers });
   const contentType = upstream.headers.get("content-type") ?? "";
 
   if (isPlaylist(targetUrl, contentType)) {
@@ -93,13 +134,17 @@ export async function proxyStream(targetUrl: string, referer?: string): Promise<
   }
 
   const buf = Buffer.from(await upstream.arrayBuffer());
-  return {
-    status: upstream.status,
-    headers: {
-      "Content-Type": contentType || "application/octet-stream",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "public, max-age=3600",
-    },
-    body: buf,
+  const outHeaders: Record<string, string> = {
+    "Content-Type": contentType || "application/octet-stream",
+    "Access-Control-Allow-Origin": "*",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=3600",
   };
+  // Forward partial-content metadata so the browser can seek (206 flow).
+  const contentRange = upstream.headers.get("content-range");
+  const contentLength = upstream.headers.get("content-length");
+  if (contentRange) outHeaders["Content-Range"] = contentRange;
+  if (contentLength) outHeaders["Content-Length"] = contentLength;
+
+  return { status: upstream.status, headers: outHeaders, body: buf };
 }

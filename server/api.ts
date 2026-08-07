@@ -94,7 +94,10 @@ function ok(body: unknown): ApiResponse {
  * Binary stream proxy handler (separate from the JSON `handleApi` because it
  * returns raw bytes + custom headers). Returns null if not a proxy request.
  */
-export async function handleProxy(rawUrl: string): Promise<ProxyResult | null> {
+export async function handleProxy(
+  rawUrl: string,
+  rangeHeader?: string,
+): Promise<ProxyResult | null> {
   const url = new URL(rawUrl, "http://localhost");
   if (url.pathname !== "/api/proxy") return null;
   const target = url.searchParams.get("url");
@@ -107,7 +110,7 @@ export async function handleProxy(rawUrl: string): Promise<ProxyResult | null> {
     };
   }
   try {
-    return await proxyStream(target, referer);
+    return await proxyStream(target, referer, rangeHeader);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {

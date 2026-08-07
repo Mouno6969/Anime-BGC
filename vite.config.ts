@@ -219,7 +219,7 @@ function vitePluginAnimeApi(): Plugin {
           );
           const fullUrl = `/api${req.url ?? ""}`;
           // Binary stream proxy (m3u8 / segments) takes priority.
-          const proxied = await handleProxy(fullUrl);
+          const proxied = await handleProxy(fullUrl, req.headers.range as string | undefined);
           if (proxied) {
             res.statusCode = proxied.status;
             for (const [k, v] of Object.entries(proxied.headers)) res.setHeader(k, v as string);
