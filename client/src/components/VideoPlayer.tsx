@@ -36,6 +36,7 @@ export default function VideoPlayer({
   const [quality, setQuality] = useState(-1); // -1 = Auto (ABR)
   const [autoLevel, setAutoLevel] = useState(-1); // level currently played while Auto
   const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
+  const [nativeHeight, setNativeHeight] = useState(0); // mp4 / native-HLS resolution
   const hlsRef = useRef<Hls | null>(null);
 
   useEffect(() => {
@@ -132,7 +133,12 @@ export default function VideoPlayer({
 
     let hls: Hls | null = null;
 
+    setNativeHeight(0);
+    const onMeta = () => {
+      if (video.videoHeight) setNativeHeight(video.videoHeight);
+    };
     const onReady = () => setLoading(false);
+    video.addEventListener("loadedmetadata", onMeta);
     video.addEventListener("loadeddata", onReady);
     video.addEventListener("canplay", onReady);
 
@@ -179,6 +185,7 @@ export default function VideoPlayer({
     }
 
     return () => {
+      video.removeEventListener("loadedmetadata", onMeta);
       video.removeEventListener("loadeddata", onReady);
       video.removeEventListener("canplay", onReady);
       if (hlsRef.current === hls) hlsRef.current = null;
@@ -211,7 +218,7 @@ export default function VideoPlayer({
     >
       {(isLandscape || isFullscreen) && controlsVisible && (
       <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-        {qualityLevels.length > 0 && (
+        {(qualityLevels.length > 0 || nativeHeight > 0) && (
           <div className="relative">
             <button
               type="button"
@@ -224,41 +231,52 @@ export default function VideoPlayer({
               title="Select video quality"
             >
               <Gauge className="h-3.5 w-3.5" />
-              {quality === -1
-                ? "Auto"
-                : `${qualityLevels.find((l) => l.index === quality)?.height ?? ""}p`}
+              {qualityLevels.length === 0
+                ? `${nativeHeight}p`
+                : quality === -1
+                  ? "Auto"
+                  : `${qualityLevels.find((l) => l.index === quality)?.height ?? ""}p`}
             </button>
             {qualityMenuOpen && (
               <div className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#0d0d10]/95 py-1 text-xs shadow-2xl backdrop-blur">
-                <button
-                  type="button"
-                  onClick={() => selectQuality(-1)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
-                >
-                  <span className="font-semibold">Auto</span>
-                  <span className="flex items-center gap-1.5 text-white/50">
-                    {autoLevel >= 0 &&
-                      (() => {
-                        const cur = qualityLevels.find((l) => l.index === autoLevel);
-                        return cur ? `${cur.height}p • ${formatBitrate(cur.bitrate)}` : null;
-                      })()}
-                    {quality === -1 && <Check className="h-3.5 w-3.5 text-primary" />}
-                  </span>
-                </button>
-                {qualityLevels.map((l) => (
-                  <button
-                    key={l.index}
-                    type="button"
-                    onClick={() => selectQuality(l.index)}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
-                  >
-                    <span className="font-semibold">{l.height}p</span>
-                    <span className="flex items-center gap-1.5 text-white/50">
-                      {formatBitrate(l.bitrate)}
-                      {quality === l.index && <Check className="h-3.5 w-3.5 text-primary" />}
-                    </span>
-                  </button>
-                ))}
+                {qualityLevels.length === 0 ? (
+                  <div className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90">
+                    <span className="font-semibold">{nativeHeight}p</span>
+                    <span className="text-white/50">single quality source</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => selectQuality(-1)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
+                    >
+                      <span className="font-semibold">Auto</span>
+                      <span className="flex items-center gap-1.5 text-white/50">
+                        {autoLevel >= 0 &&
+                          (() => {
+                            const cur = qualityLevels.find((l) => l.index === autoLevel);
+                            return cur ? `${cur.height}p • ${formatBitrate(cur.bitrate)}` : null;
+                          })()}
+                        {quality === -1 && <Check className="h-3.5 w-3.5 text-primary" />}
+                      </span>
+                    </button>
+                    {qualityLevels.map((l) => (
+                      <button
+                        key={l.index}
+                        type="button"
+                        onClick={() => selectQuality(l.index)}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/90 transition-colors hover:bg-white/10"
+                      >
+                        <span className="font-semibold">{l.height}p</span>
+                        <span className="flex items-center gap-1.5 text-white/50">
+                          {formatBitrate(l.bitrate)}
+                          {quality === l.index && <Check className="h-3.5 w-3.5 text-primary" />}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
