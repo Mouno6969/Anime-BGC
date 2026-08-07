@@ -51,6 +51,13 @@ export default function Watch() {
 
   const hasDub = (providerData?.dub.length ?? 0) > 0;
 
+  // Display servers as "BGC 1", "BGC 2", ... while the real provider ids
+  // keep being used internally for API calls.
+  const serverLabel = (p: string) => {
+    const i = eps?.providers.indexOf(p) ?? -1;
+    return i >= 0 ? `BGC ${i + 1}` : p;
+  };
+
   const episodeList: Episode[] = useMemo(() => {
     if (!providerData) return [];
     return category === "dub" && providerData.dub.length ? providerData.dub : providerData.sub;
@@ -249,7 +256,7 @@ export default function Watch() {
                     >
                       {eps.providers.map((p) => (
                         <option key={p} value={p} className="bg-[#0d0d10]">
-                          {p}
+                          {serverLabel(p)}
                         </option>
                       ))}
                     </select>
@@ -260,7 +267,8 @@ export default function Watch() {
 
             {activeProvider && activeProvider !== provider && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Server “{provider}” was unavailable — now playing from “{activeProvider}”.
+                Server “{serverLabel(provider)}” was unavailable — now playing from “
+                {serverLabel(activeProvider)}”.
               </p>
             )}
 
