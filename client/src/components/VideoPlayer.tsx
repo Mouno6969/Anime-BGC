@@ -32,9 +32,27 @@ export default function VideoPlayer({
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      const active = Boolean(document.fullscreenElement);
-      setIsFullscreen(active);
-      if (!active) setControlsVisible(false);
+      const el = document.fullscreenElement;
+      setIsFullscreen(Boolean(el));
+      if (!el) {
+        setControlsVisible(false);
+        return;
+      }
+      // The native fullscreen button fullscreens only the <video> element,
+      // where no custom button can render. Seamlessly move fullscreen to the
+      // player container instead, so the Fit/Full controls stay available
+      // inside fullscreen. Playback and native controls are unaffected.
+      if (el === videoRef.current) {
+        void (async () => {
+          try {
+            await document.exitFullscreen();
+            await containerRef.current?.requestFullscreen();
+            showControls();
+          } catch {
+            /* keep native fullscreen if the browser blocks the move */
+          }
+        })();
+      }
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
