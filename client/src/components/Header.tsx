@@ -42,6 +42,17 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Lock page scroll while the mobile drawer is open (also prevents the
+  // header's scrolled state from flipping underneath it).
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   const soon = (label: string) =>
     toast(`${label} — coming soon`, {
       description: "Backend & API are on the way.",
@@ -67,6 +78,7 @@ export default function Header() {
   };
 
   return (
+    <>
     <header
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-colors duration-300",
@@ -152,39 +164,44 @@ export default function Header() {
         </div>
       </div>
 
-      {/* mobile drawer */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="absolute left-0 top-0 h-full w-72 max-w-[80%] animate-fade-up border-r border-border bg-[#0d0d10] p-5">
-            <div className="flex items-center justify-between">
-              <Wordmark />
-              <button
-                onClick={() => setMobileOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/10"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <nav className="mt-8 flex flex-col gap-1">
-              {navLinks.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-lg px-3 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-white/8 hover:text-primary"
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-        </div>
-      )}
     </header>
+
+    {/* mobile drawer — rendered OUTSIDE <header> on purpose: the scrolled
+        header uses backdrop-blur (backdrop-filter), which would otherwise
+        become the containing block for this fixed drawer and break its
+        geometry/stacking, letting page text overlap it. */}
+    {mobileOpen && (
+      <div className="fixed inset-0 z-[60] lg:hidden">
+        <div
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
+        <div className="absolute left-0 top-0 h-full w-72 max-w-[80%] animate-fade-up border-r border-border bg-[#0d0d10] p-5">
+          <div className="flex items-center justify-between">
+            <Wordmark />
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/10"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <nav className="mt-8 flex flex-col gap-1">
+            {navLinks.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-3 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-white/8 hover:text-primary"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
