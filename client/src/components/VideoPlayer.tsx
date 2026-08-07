@@ -26,12 +26,38 @@ export default function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fitMode, setFitMode] = useState<"contain" | "cover">("contain");
+  const [isLandscape, setIsLandscape] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const hideControlsTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    const updateOrientation = () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      setIsLandscape(landscape);
+      if (!landscape) setControlsVisible(false);
+    };
+    updateOrientation();
+    window.addEventListener("resize", updateOrientation);
+    window.addEventListener("orientationchange", updateOrientation);
+    return () => {
+      window.removeEventListener("resize", updateOrientation);
+      window.removeEventListener("orientationchange", updateOrientation);
+      if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
+    };
+  }, []);
+
+  const revealControls = () => {
+    if (!isLandscape) return;
+    setControlsVisible(true);
+    if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
+    hideControlsTimer.current = window.setTimeout(() => setControlsVisible(false), 4000);
+  };
 
   const toggleFullscreen = async () => {
     const container = containerRef.current;
@@ -130,12 +156,14 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
+      onPointerDown={revealControls}
       className={
         isFullscreen
           ? "relative h-screen w-screen overflow-hidden bg-black"
           : "relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black"
       }
     >
+      {isLandscape && controlsVisible && (
       <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
         <button
           type="button"
@@ -158,6 +186,7 @@ export default function VideoPlayer({
           {isFullscreen ? "Exit" : "Full"}
         </button>
       </div>
+      )}
       <video
         ref={videoRef}
         poster={poster}
