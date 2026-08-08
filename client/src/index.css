@@ -221,6 +221,43 @@
   .animate-ken-burns {
     animation: bgc-ken-burns 12s ease-out both;
   }
+  /* custom player: quick pop for tap/skip flashes */
+  @keyframes bgc-pop {
+    0% {
+      opacity: 0.9;
+      transform: scale(0.7);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.5);
+    }
+  }
+  .animate-bgc-pop {
+    animation: bgc-pop 0.55s ease-out both;
+  }
+  @keyframes bgc-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-bgc-fade {
+    animation: bgc-fade 0.18s ease-out both;
+  }
+}
+
+/* custom player: subtitle cues + volume slider accent */
+video::cue {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+input[type="range"].player-range {
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--primary);
 }
 
 @media (prefers-reduced-motion: reduce) {

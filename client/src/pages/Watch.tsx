@@ -68,6 +68,12 @@ export default function Watch() {
     [episodeList, epNumber],
   );
 
+  const nextEpisode: Episode | null = useMemo(() => {
+    if (!selected) return null;
+    const i = episodeList.findIndex((e) => e.number === selected.number);
+    return i >= 0 ? (episodeList[i + 1] ?? null) : null;
+  }, [episodeList, selected]);
+
   // default the selected episode number once the list loads
   useEffect(() => {
     if (episodeList.length && epNumber == null) setEpNumber(episodeList[0].number);
@@ -216,7 +222,15 @@ export default function Watch() {
             ) : sourceError ? (
               <ErrorState message={sourceError} />
             ) : (
-              <VideoPlayer source={bestSource} subtitles={sources?.subtitles ?? []} poster={anime?.banner} />
+              <VideoPlayer
+                source={bestSource}
+                subtitles={sources?.subtitles ?? []}
+                poster={anime?.banner}
+                animeId={id}
+                episodeNumber={selected?.number ?? 1}
+                nextEpisode={nextEpisode ? { number: nextEpisode.number, title: nextEpisode.title } : null}
+                onNextEpisode={nextEpisode ? () => setEpNumber(nextEpisode.number) : undefined}
+              />
             )}
 
             {/* now playing + controls */}
