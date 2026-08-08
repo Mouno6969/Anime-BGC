@@ -1,8 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { useState } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import Intro from "./components/Intro";
+import { shouldShowIntro } from "./lib/intro";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Watch from "./pages/Watch";
@@ -26,12 +29,17 @@ function Router() {
 }
 
 function App() {
+  // Brand intro overlays the app on first visit of a session (configurable in
+  // lib/intro.ts). The router keeps loading behind it, so the site is ready
+  // the moment the intro finishes — no extra wait for the user.
+  const [introVisible, setIntroVisible] = useState(() => shouldShowIntro());
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
           <Router />
+          {introVisible && <Intro onDone={() => setIntroVisible(false)} />}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

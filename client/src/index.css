@@ -268,3 +268,92 @@ input[type="range"].player-range {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ------------------------------------------------------------------------ */
+/* BGC brand intro (client/src/components/Intro.tsx) — scoped keyframes.      */
+/* Timeline: letters 3.0s staggered, caption 3.05s, rule 3.6s, sheen 4.6s.   */
+/* ------------------------------------------------------------------------ */
+
+.bgc-letter {
+  opacity: 0;
+  animation: bgc-letter-in 1s cubic-bezier(0.19, 1, 0.22, 1) both;
+  animation-delay: var(--d, 3s);
+  will-change: transform, opacity, filter;
+}
+
+.bgc-glyph {
+  background-image: linear-gradient(115deg, #f7efe0 35%, #e7c87f 50%, #f7efe0 65%);
+  background-size: 250% 100%;
+  background-position: 130% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bgc-sheen 1.7s ease-in-out 4.6s both;
+}
+
+.bgc-caption {
+  opacity: 0;
+  animation: bgc-caption-in 1.1s cubic-bezier(0.19, 1, 0.22, 1) 3.05s both;
+}
+
+.bgc-rule {
+  transform: scaleX(0);
+  opacity: 0;
+  transform-origin: center;
+  animation: bgc-rule-in 1s ease-out 3.6s both;
+}
+
+.bgc-skip {
+  opacity: 0;
+  animation: bgc-skip-in 0.8s ease-out 0.9s both;
+}
+
+@keyframes bgc-letter-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em) scale(0.94);
+    filter: blur(12px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes bgc-sheen {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
+}
+
+@keyframes bgc-caption-in {
+  from { opacity: 0; transform: translateY(10px); letter-spacing: 0.9em; }
+  to { opacity: 1; transform: translateY(0); letter-spacing: 0.55em; }
+}
+
+@keyframes bgc-rule-in {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes bgc-skip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bgc-letter,
+  .bgc-glyph,
+  .bgc-caption,
+  .bgc-rule,
+  .bgc-skip {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
