@@ -16,6 +16,7 @@ const navLinks = [
   { label: "Trending", href: "/trending" },
   { label: "Schedule", href: "/schedule" },
   { label: "Watchlist", href: "/watchlist" },
+  { label: "History", href: "/history" },
 ];
 
 function Wordmark() {

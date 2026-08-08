@@ -43,6 +43,8 @@ export default function VideoPlayer({
   poster,
   animeId = 0,
   episodeNumber = 1,
+  animeTitle,
+  animePoster,
   nextEpisode = null,
   onNextEpisode,
   onFatalError,
@@ -52,6 +54,8 @@ export default function VideoPlayer({
   poster?: string;
   animeId?: number;
   episodeNumber?: number;
+  animeTitle?: string;
+  animePoster?: string;
   nextEpisode?: NextEpisodeInfo | null;
   onNextEpisode?: () => void;
   onFatalError?: () => void;
@@ -61,7 +65,7 @@ export default function VideoPlayer({
   const hlsRef = useRef<Hls | null>(null);
   const fatalRef = useRef(onFatalError);
   fatalRef.current = onFatalError;
-  const progressCtx = useRef({ animeId, episode: episodeNumber });
+  const progressCtx = useRef({ animeId, episode: episodeNumber, title: animeTitle, poster: animePoster });
 
   // transport state
   const [playing, setPlaying] = useState(false);
@@ -374,7 +378,7 @@ export default function VideoPlayer({
     const video = videoRef.current;
     if (!source || !video) return;
 
-    progressCtx.current = { animeId, episode: episodeNumber };
+    progressCtx.current = { animeId, episode: episodeNumber, title: animeTitle, poster: animePoster };
     setLoading(true);
     setError(null);
     setEnded(false);
@@ -405,7 +409,10 @@ export default function VideoPlayer({
 
     const saveNow = () => {
       const ctx = progressCtx.current;
-      saveProgress(ctx.animeId, ctx.episode, video.currentTime, video.duration || 0);
+      saveProgress(ctx.animeId, ctx.episode, video.currentTime, video.duration || 0, {
+        title: ctx.title,
+        poster: ctx.poster,
+      });
     };
 
     const onLoadedMetadata = () => {
@@ -561,7 +568,10 @@ export default function VideoPlayer({
       const v = videoRef.current;
       if (v && !v.paused && Number.isFinite(v.duration)) {
         const ctx = progressCtx.current;
-        saveProgress(ctx.animeId, ctx.episode, v.currentTime, v.duration);
+        saveProgress(ctx.animeId, ctx.episode, v.currentTime, v.duration, {
+          title: ctx.title,
+          poster: ctx.poster,
+        });
       }
     }, 5000);
     return () => window.clearInterval(id);

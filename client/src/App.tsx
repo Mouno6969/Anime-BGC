@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Watch from "./pages/Watch";
 import Browse from "./pages/Browse";
+import History from "./pages/History";
 
 function Router() {
   return (
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/search">{() => <Browse variant="search" />}</Route>
       <Route path="/schedule">{() => <Browse variant="schedule" />}</Route>
       <Route path="/watchlist">{() => <Browse variant="watchlist" />}</Route>
+      <Route path="/history" component={History} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

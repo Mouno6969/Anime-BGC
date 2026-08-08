@@ -31,7 +31,16 @@ export default function Watch() {
 
   const [category, setCategory] = useState<"sub" | "dub">("sub");
   const [provider, setProvider] = useState<string>("auto");
-  const [epNumber, setEpNumber] = useState<number | null>(null);
+  // Deep-link support: /watch/:id?ep=N opens episode N directly (used by the
+  // History page's continue-watching cards). Falls back to episode 1.
+  const [epNumber, setEpNumber] = useState<number | null>(() => {
+    try {
+      const ep = Number(new URLSearchParams(window.location.search).get("ep"));
+      return Number.isFinite(ep) && ep > 0 ? ep : null;
+    } catch {
+      return null;
+    }
+  });
   const [sources, setSources] = useState<SourcesResult | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("");
   const [, setSourceLoading] = useState(false);
@@ -267,6 +276,8 @@ export default function Watch() {
                 poster={anime?.banner}
                 animeId={id}
                 episodeNumber={selected?.number ?? 1}
+                animeTitle={anime?.title}
+                animePoster={anime?.poster}
                 nextEpisode={nextEpisode ? { number: nextEpisode.number, title: nextEpisode.title } : null}
                 onNextEpisode={nextEpisode ? () => setEpNumber(nextEpisode.number) : undefined}
                 onFatalError={handleFatalError}
