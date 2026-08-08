@@ -9,6 +9,8 @@ import { Menu, Search, Shuffle, Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import { LOGO, featured } from "@/lib/animeData";
 import { api } from "@/lib/api";
+import { getAvatarDataUri } from "@/lib/avatar";
+import ProfileDialog from "@/components/ProfileDialog";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -33,7 +35,9 @@ function Wordmark() {
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [term, setTerm] = useState("");
+  const [avatarUrl] = useState(() => getAvatarDataUri());
   const [, navigate] = useLocation();
 
   useEffect(() => {
@@ -154,13 +158,11 @@ export default function Header() {
             <Bell className="h-5 w-5" />
           </button>
           <button
-            onClick={() => soon("Profile")}
-            className="ml-1 h-9 w-9 overflow-hidden rounded-full ring-2 ring-primary/40 transition-all hover:ring-primary"
+            onClick={() => setProfileOpen(true)}
+            className="ml-1 h-10 w-10 overflow-hidden rounded-full ring-2 ring-primary/40 transition-all hover:ring-primary"
             aria-label="Profile"
           >
-            <span className="grid h-full w-full place-items-center bg-gradient-to-br from-primary to-[#7d6cff] text-sm font-bold text-primary-foreground">
-              B
-            </span>
+            <img src={avatarUrl} alt="Your avatar" className="h-full w-full object-cover" />
           </button>
         </div>
       </div>
@@ -203,6 +205,8 @@ export default function Header() {
         </div>
       </div>
     )}
+
+    <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} avatarUrl={avatarUrl} />
     </>
   );
 }
