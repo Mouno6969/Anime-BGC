@@ -9,6 +9,7 @@ import type {
   Anime,
   EpisodesResult,
   PagedResult,
+  RacedSourcesResult,
   SourcesResult,
 } from "@shared/anime";
 
@@ -64,6 +65,19 @@ export const api = {
       `/api/sources?episodeId=${encodeURIComponent(episodeId)}&provider=${encodeURIComponent(
         provider,
       )}&anilistId=${anilistId}&category=${category}`,
+      signal,
+    ),
+  raceSources: (
+    anilistId: number,
+    number: number,
+    category: "sub" | "dub" = "sub",
+    exclude: string[] = [],
+    signal?: AbortSignal,
+  ) =>
+    getJson<RacedSourcesResult>(
+      `/api/sources/race?anilistId=${anilistId}&number=${number}&category=${category}${
+        exclude.length ? `&exclude=${encodeURIComponent(exclude.join(","))}` : ""
+      }`,
       signal,
     ),
 };

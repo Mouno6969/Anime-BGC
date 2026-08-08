@@ -79,6 +79,33 @@ export async function handleApi(
       return ok(await miruro.getSources(episodeId, provider, anilistId, category));
     }
 
+    // Race every provider that carries this episode; first valid stream wins.
+    if (path === "/api/sources/race") {
+      const anilistId = num(q.get("anilistId"), 0);
+      const number = num(q.get("number"), 0);
+      const category = (q.get("category") as "sub" | "dub") ?? "sub";
+      const exclude = (q.get("exclude") ?? "").split(",").filter(Boolean);
+      if (!anilistId || !number) {
+        return { status: 400, body: { error: "anilistId and number are required" } };
+      }
+      const eps = await miruro.getEpisodes(anilistId);
+      const candidates: miruro.RaceCandidate[] = [];
+      for (const pd of eps.byProvider) {
+        const list = category === "dub" && pd.dub.length ? pd.dub : pd.sub;
+        const match = list.find((e) => e.number === number);
+        if (match) candidates.push({ episodeId: match.id, provider: pd.provider });
+      }
+      if (!candidates.length) {
+        return { status: 404, body: { error: "No provider carries this episode." } };
+      }
+      return ok(await miruro.raceSources(candidates, anilistId, category, exclude));
+    }
+
+    // Provider health scoreboard (diagnostics).
+    if (path === "/api/providers/health") {
+      return ok(miruro.providerHealth());
+    }
+
     return { status: 404, body: { error: `Unknown API route: ${path}` } };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

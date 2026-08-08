@@ -45,6 +45,7 @@ export default function VideoPlayer({
   episodeNumber = 1,
   nextEpisode = null,
   onNextEpisode,
+  onFatalError,
 }: {
   source: StreamSource | null;
   subtitles?: SubtitleTrack[];
@@ -53,10 +54,13 @@ export default function VideoPlayer({
   episodeNumber?: number;
   nextEpisode?: NextEpisodeInfo | null;
   onNextEpisode?: () => void;
+  onFatalError?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const fatalRef = useRef(onFatalError);
+  fatalRef.current = onFatalError;
   const progressCtx = useRef({ animeId, episode: episodeNumber });
 
   // transport state
@@ -387,6 +391,17 @@ export default function VideoPlayer({
 
     const isHls = source.type === "hls" || source.url.includes(".m3u8");
     const playUrl = source.referer ? api.proxyUrl(source.url, source.referer) : source.url;
+    // Report a fatal error at most once per source (late timers/events from a
+    // dead source must not blame the failover replacement).
+    let fatalSent = false;
+    const reportFatal = () => {
+      if (fatalSent) return;
+      fatalSent = true;
+      setLoading(false);
+      setBuffering(false);
+      setError("This stream could not be loaded. Pick another server or episode.");
+      fatalRef.current?.();
+    };
 
     const saveNow = () => {
       const ctx = progressCtx.current;
@@ -427,10 +442,19 @@ export default function VideoPlayer({
       setPlaying(false);
       saveNow();
     };
-    const onWaiting = () => setBuffering(true);
+    // Mid-playback starvation watchdog: if the stream buffers for 15s with no
+    // recovery, treat the source as dead so auto-failover can switch servers.
+    let starveTimer = 0;
+    const onWaiting = () => {
+      setBuffering(true);
+      window.clearTimeout(starveTimer);
+      starveTimer = window.setTimeout(() => reportFatal(), 15_000);
+    };
     const onPlaying = () => {
       setBuffering(false);
       setLoading(false);
+      window.clearTimeout(stallTimer);
+      window.clearTimeout(starveTimer);
     };
     const onEnded = () => {
       setPlaying(false);
@@ -440,6 +464,17 @@ export default function VideoPlayer({
       clearProgress(ctx.animeId, ctx.episode);
     };
     const onPageHide = () => saveNow();
+    // Watchdog: a silently stalling stream (aborted/hanging first request can
+    // leave native video stuck with no error event) is treated as fatal after
+    // 20s so auto-failover can switch servers. Cleared once playback starts.
+    const stallTimer = window.setTimeout(() => {
+      if (video.readyState < 2) reportFatal();
+    }, 20_000);
+    // Native (mp4 / Safari HLS) fatal load error -> report for auto-failover.
+    const onVideoError = () => {
+      if (!video.error) return; // emptied src during cleanup also fires this
+      reportFatal();
+    };
 
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("timeupdate", onTimeUpdate);
@@ -450,6 +485,7 @@ export default function VideoPlayer({
     video.addEventListener("playing", onPlaying);
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ended", onEnded);
+    video.addEventListener("error", onVideoError);
     window.addEventListener("pagehide", onPageHide);
 
     let hls: Hls | null = null;
@@ -468,18 +504,26 @@ export default function VideoPlayer({
         video.play().catch(() => {});
       });
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => setAutoLevel(data.level));
+      let netErrors = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls?.startLoad();
+              // soft-retry a few times, then give up so auto-failover can switch servers
+              netErrors += 1;
+              if (netErrors >= 3) {
+                hls?.destroy();
+                reportFatal();
+              } else {
+                hls?.startLoad();
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls?.recoverMediaError();
               break;
             default:
               hls?.destroy();
-              setError("This stream could not be loaded. Pick another server or episode.");
+              reportFatal();
           }
         }
       });
@@ -499,9 +543,12 @@ export default function VideoPlayer({
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("canplay", onPlaying);
       video.removeEventListener("ended", onEnded);
+      video.removeEventListener("error", onVideoError);
       window.removeEventListener("pagehide", onPageHide);
       if (hlsRef.current === hls) hlsRef.current = null;
       if (hls) hls.destroy();
+      window.clearTimeout(stallTimer);
+      window.clearTimeout(starveTimer);
       video.removeAttribute("src");
       video.load();
     };

@@ -58,6 +58,8 @@ All served under `/api` by both the dev middleware and the production server:
 | `GET /api/info/:id` | Full anime details |
 | `GET /api/episodes/:id` | Episode lists grouped by provider (sub + dub) |
 | `GET /api/sources?episodeId=&provider=&anilistId=&category=` | Streaming sources for an episode |
+| `GET /api/sources/race?anilistId=&number=&category=&exclude=` | Races all providers in parallel; first validated-live stream wins |
+| `GET /api/providers/health` | In-memory provider scoreboard (wins/fails/latency/score) |
 | `GET /api/proxy?url=&referer=` | Server-side stream proxy (rewrites m3u8 + forwards Referer) |
 
 ## Project Structure
@@ -98,9 +100,22 @@ point `MIRURO_API_URL` at it. On this VPS it is running on `127.0.0.1:8788`.
 
 1. `GET /api/info/:id` and `GET /api/episodes/:id` load details + the per-provider
    episode map (providers are ordered by tested reliability).
-2. Selecting an episode calls `GET /api/sources`; if a provider yields no playable
-   stream the client automatically falls back to the next provider.
-3. The chosen HLS URL is played through `GET /api/proxy`, which fetches the
+2. In the default **Auto** server mode, `GET /api/sources/race` fires a lightweight
+   availability check at *every* provider carrying the episode, in parallel. Each
+   candidate's stream is validated with a tiny ranged probe (HLS playlists must
+     start with `#EXTM3U`, rejecting hotlink-blocked zombie URLs). The first
+   provider passing validation wins; all losing checks are aborted immediately.
+   Only the winning provider delivers the actual video. Picking a specific server
+   (BGC 1, BGC 2, …) pins playback to that provider with the old sequential
+   fallback.
+3. Race outcomes feed an in-memory health scoreboard (wins/fails/latency), so the
+   most reliable providers are favoured over time.
+4. If the stream dies mid-playback, the player reports it (native error, repeated
+   hls.js fatal errors, or a 15–20s stall watchdog) and the page automatically
+   re-races without the failed provider — playback resumes from the saved
+   position. Automatic failover is capped at 2 switches per episode to prevent
+   loops; after that the error overlay offers a manual Retry.
+5. The chosen HLS URL is played through `GET /api/proxy`, which fetches the
    playlist server-side with the required `Referer`, rewrites every segment/variant
    URL back through the proxy, and streams it to `hls.js`.
 

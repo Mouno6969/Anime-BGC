@@ -76,6 +76,19 @@ export interface SourcesResult {
   outro?: { start: number; end: number };
 }
 
+/** Per-provider outcome of a parallel source race. */
+export interface RaceAttempt {
+  provider: string;
+  ms: number;
+  ok: boolean;
+}
+
+/** Winner of a multi-provider race plus diagnostics. */
+export interface RacedSourcesResult extends SourcesResult {
+  provider: string;
+  raced: RaceAttempt[];
+}
+
 export interface PagedResult<T> {
   page: number;
   hasNextPage: boolean;

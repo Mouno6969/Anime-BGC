@@ -4,7 +4,7 @@
  * episode, provider and sub/dub, fetches streaming sources on demand (with
  * automatic provider fallback), and plays them via the HLS VideoPlayer.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { ArrowLeft, Play, Star, Tv, Clock, Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
@@ -30,22 +30,29 @@ export default function Watch() {
   );
 
   const [category, setCategory] = useState<"sub" | "dub">("sub");
-  const [provider, setProvider] = useState<string>("");
+  const [provider, setProvider] = useState<string>("auto");
   const [epNumber, setEpNumber] = useState<number | null>(null);
   const [sources, setSources] = useState<SourcesResult | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("");
   const [, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
 
+  // Failover state, keyed by episode so it resets on episode/category change.
+  const [failState, setFailState] = useState<{ key: string; excluded: string[]; count: number }>({
+    key: "",
+    excluded: [],
+    count: 0,
+  });
+  const activeProviderRef = useRef("");
+  activeProviderRef.current = activeProvider;
+
   const { has, toggle } = useWatchlist();
 
-  // default provider once episodes load
-  useEffect(() => {
-    if (eps?.provider) setProvider((p) => p || eps.provider);
-  }, [eps]);
-
   const providerData: ProviderEpisodes | undefined = useMemo(
-    () => eps?.byProvider.find((p) => p.provider === provider),
+    () =>
+      eps?.byProvider.find(
+        (p) => p.provider === (provider === "auto" ? eps.provider : provider),
+      ),
     [eps, provider],
   );
 
@@ -94,6 +101,30 @@ export default function Watch() {
     setSourceLoading(true);
     setSourceError(null);
     setSources(null);
+    setActiveProvider("");
+
+    const num0 = selected.number;
+    const failKey = `${id}:${num0}:${category}`;
+    const excluded = failState.key === failKey ? failState.excluded : [];
+
+    // Auto mode: race every provider in parallel — first valid stream wins,
+    // losers are aborted server-side automatically.
+    if (provider === "auto") {
+      api
+        .raceSources(id, num0, category, excluded, controller.signal)
+        .then((res) => {
+          if (controller.signal.aborted) return;
+          setSources(res);
+          setActiveProvider(res.provider);
+          setSourceLoading(false);
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setSourceError("No playable source found for this episode across providers.");
+          setSourceLoading(false);
+        });
+      return () => controller.abort();
+    }
 
     const order = [provider, ...eps.providers.filter((p) => p !== provider)];
     const num = selected.number;
@@ -125,7 +156,19 @@ export default function Watch() {
     })();
 
     return () => controller.abort();
-  }, [selected, eps, provider, category, id]);
+  }, [selected, eps, provider, category, id, failState]);
+
+  // Mid-playback failover: the player reports a fatal stream error -> re-race
+  // without the failed provider; playback resumes from the saved position.
+  const handleFatalError = () => {
+    if (provider !== "auto" || !selected) return;
+    const failed = activeProviderRef.current;
+    if (!failed) return;
+    const key = `${id}:${selected.number}:${category}`;
+    const cur = failState.key === key ? failState : { key, excluded: [], count: 0 };
+    if (cur.count >= 2 || cur.excluded.includes(failed)) return; // loop guard
+    setFailState({ key, excluded: [...cur.excluded, failed], count: cur.count + 1 });
+  };
 
   // prefer an HLS stream when present, else the first available
   const bestSource = useMemo(() => {
@@ -226,6 +269,7 @@ export default function Watch() {
                 episodeNumber={selected?.number ?? 1}
                 nextEpisode={nextEpisode ? { number: nextEpisode.number, title: nextEpisode.title } : null}
                 onNextEpisode={nextEpisode ? () => setEpNumber(nextEpisode.number) : undefined}
+                onFatalError={handleFatalError}
               />
             ) : (
               <div className="grid aspect-video w-full place-items-center rounded-2xl border border-border bg-card/60">
@@ -273,6 +317,9 @@ export default function Watch() {
                       className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground/80 outline-none transition-colors hover:border-primary/40"
                       aria-label="Streaming server"
                     >
+                      <option value="auto" className="bg-[#0d0d10]">
+                        Auto
+                      </option>
                       {eps.providers.map((p) => (
                         <option key={p} value={p} className="bg-[#0d0d10]">
                           {serverLabel(p)}
@@ -284,7 +331,16 @@ export default function Watch() {
               </div>
             )}
 
-            {activeProvider && activeProvider !== provider && (
+            {provider === "auto" && activeProvider && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Auto picked <span className="font-semibold text-primary">{serverLabel(activeProvider)}</span>
+                {failState.excluded.length > 0 &&
+                  failState.key === `${id}:${selected?.number}:${category}` &&
+                  ` after ${failState.excluded.map(serverLabel).join(", ")} failed`}
+                .
+              </p>
+            )}
+            {provider !== "auto" && activeProvider && activeProvider !== provider && (
               <p className="mt-2 text-xs text-muted-foreground">
                 Server “{serverLabel(provider)}” was unavailable — now playing from “
                 {serverLabel(activeProvider)}”.
