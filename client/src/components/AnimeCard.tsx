@@ -3,8 +3,10 @@
  * Style ref: miruro.tv card (type pill top-left, score badge, title reveal on hover).
  */
 import { Link } from "wouter";
-import { Play, Star } from "lucide-react";
+import { Play, Star, Bookmark, BookmarkCheck } from "lucide-react";
+import { toast } from "sonner";
 import type { Anime } from "@shared/anime";
+import { useWatchlist } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
 
 const typeLabel: Record<string, string> = {
@@ -24,6 +26,8 @@ export default function AnimeCard({
   className?: string;
   index?: number;
 }) {
+  const { has, toggle } = useWatchlist();
+  const saved = has(anime.id);
   return (
     <Link
       href={`/watch/${anime.id}`}
@@ -66,6 +70,28 @@ export default function AnimeCard({
             <span>{anime.episodes} eps</span>
           </div>
         </div>
+
+        {/* quick watchlist toggle (always visible so mobile users can find it) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const added = toggle(anime);
+            toast(added ? "Added to Watchlist" : "Removed from Watchlist", {
+              description: anime.title,
+            });
+          }}
+          className={cn(
+            "absolute bottom-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full backdrop-blur-sm transition-all active:scale-90",
+            saved
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/40"
+              : "bg-black/65 text-white/85 hover:bg-black/85 hover:text-primary",
+          )}
+          aria-label={saved ? "Remove from Watchlist" : "Add to Watchlist"}
+        >
+          {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+        </button>
       </div>
 
       <h3 className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-foreground/90 transition-colors group-hover:text-primary">

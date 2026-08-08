@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/Skeletons";
 import { api, useAsync } from "@/lib/api";
 import { useWatchlist } from "@/lib/watchlist";
 import type { Episode, ProviderEpisodes, SourcesResult } from "@shared/anime";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export default function Watch() {
@@ -248,12 +249,18 @@ export default function Watch() {
                 </span>
                 {anime.year > 0 && <span>{anime.year}</span>}
                 <button
-                  onClick={() => anime && toggle(anime)}
+                  onClick={() => {
+                    if (!anime) return;
+                    const added = toggle(anime);
+                    toast(added ? "Added to Watchlist" : "Removed from Watchlist", {
+                      description: anime.title,
+                    });
+                  }}
                   className={cn(
-                    "ml-1 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur-md transition-colors",
+                    "ml-1 flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold backdrop-blur-md transition-all active:scale-95",
                     saved
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border bg-black/40 text-white/85 hover:border-primary/40 hover:text-primary",
+                      ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "border-primary/60 bg-black/50 text-primary hover:bg-primary hover:text-primary-foreground",
                   )}
                 >
                   {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
