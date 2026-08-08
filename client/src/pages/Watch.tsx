@@ -34,7 +34,7 @@ export default function Watch() {
   const [epNumber, setEpNumber] = useState<number | null>(null);
   const [sources, setSources] = useState<SourcesResult | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("");
-  const [sourceLoading, setSourceLoading] = useState(false);
+  const [, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
 
   const { has, toggle } = useWatchlist();
@@ -215,13 +215,9 @@ export default function Watch() {
         <div className="container grid gap-8 py-10 lg:grid-cols-[1fr_320px]">
           <div>
             {/* player */}
-            {sourceLoading ? (
-              <div className="grid aspect-video w-full place-items-center rounded-2xl border border-border bg-card/60">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              </div>
-            ) : sourceError ? (
+            {sourceError ? (
               <ErrorState message={sourceError} />
-            ) : (
+            ) : bestSource ? (
               <VideoPlayer
                 source={bestSource}
                 subtitles={sources?.subtitles ?? []}
@@ -231,6 +227,15 @@ export default function Watch() {
                 nextEpisode={nextEpisode ? { number: nextEpisode.number, title: nextEpisode.title } : null}
                 onNextEpisode={nextEpisode ? () => setEpNumber(nextEpisode.number) : undefined}
               />
+            ) : (
+              <div className="grid aspect-video w-full place-items-center rounded-2xl border border-border bg-card/60">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                    Fetching stream…
+                  </p>
+                </div>
+              </div>
             )}
 
             {/* now playing + controls */}
