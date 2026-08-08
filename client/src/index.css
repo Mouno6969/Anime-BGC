@@ -282,7 +282,7 @@ input[type="range"].player-range {
 }
 
 .bgc-glyph {
-  background-image: linear-gradient(115deg, #f7efe0 35%, #e7c87f 50%, #f7efe0 65%);
+  background-image: linear-gradient(115deg, #f2efff 35%, #b5a8ff 50%, #f2efff 65%);
   background-size: 250% 100%;
   background-position: 130% 0;
   -webkit-background-clip: text;

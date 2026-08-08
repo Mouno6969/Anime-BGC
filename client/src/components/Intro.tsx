@@ -1,10 +1,11 @@
 /**
  * ANIME BGC — original brand intro (Canvas 2D + DOM text, zero dependencies).
  *
- * Visual language: dark obsidian stage, deep crimson energy with subtle gold
- * accents — elegant particles converge into a refined circular portal while
- * flowing ink-energy strokes orbit it; the BGC letters then reveal
- * cinematically under soft volumetric light. Fully original artwork.
+ * Visual language: dark obsidian stage in the site's own brand palette —
+ * lavender energy with deep-violet accents. Elegant particles converge into
+ * a refined circular portal while flowing ink-energy strokes orbit it; the
+ * BGC letters then reveal cinematically under soft volumetric light.
+ * Fully original artwork.
  *
  * Engineering: rAF-driven canvas (DPR ≤ 2, particle count scales with
  * viewport), DOM letters for crisp accessible text, skip button + Esc,
@@ -13,10 +14,12 @@
 import { useEffect, useRef, useState } from "react";
 import { INTRO_CONFIG, markIntroShown } from "@/lib/intro";
 
-const CRIMSON = { r: 208, g: 34, b: 62 };
-const GOLD = { r: 217, g: 178, b: 106 };
-const WARM = { r: 246, g: 238, b: 222 };
-const OBSIDIAN = "#060608";
+// Brand palette — matches the site theme exactly: lavender primary #b5a8ff,
+// deep violet #7d6cff (the header wordmark gradient), near-black #080808.
+const ACCENT = { r: 181, g: 168, b: 255 };
+const DEEP = { r: 125, g: 108, b: 255 };
+const WARM = { r: 240, g: 238, b: 250 };
+const OBSIDIAN = "#080808";
 
 const EXIT_MS = 700; // exit fade length (end of timeline)
 const LETTERS_AT = 3000; // when BGC letters start revealing
@@ -88,7 +91,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
     const count = Math.round(Math.min(150, Math.max(70, (w * h) / 16000)));
     const particles: Particle[] = Array.from({ length: count }, (_, i) => {
       const pick = i % 10;
-      const color = pick < 6 ? WARM : pick < 9 ? CRIMSON : GOLD;
+      const color = pick < 6 ? WARM : pick < 9 ? ACCENT : DEEP;
       return {
         angle: Math.random() * Math.PI * 2,
         radius: 0.55 + Math.random() * 0.75,
@@ -107,7 +110,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
       len: Math.PI * (0.55 + Math.random() * 0.5),
       speed: 0.9 + Math.random() * 0.7,
       width: 1.4 + Math.random() * 2.2,
-      tip: i % 3 === 2 ? GOLD : CRIMSON,
+      tip: i % 3 === 2 ? DEEP : ACCENT,
       dir: i % 2 === 0 ? 1 : -1,
       radiusF: [1.0, 1.12, 1.24, 1.36, 1.05][i],
     }));
@@ -171,13 +174,13 @@ export default function Intro({ onDone }: { onDone: () => void }) {
       if (pGlow > 0) {
         const glowA = (0.16 + 0.1 * pLetters) * pulse * pIn;
         const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 2.4);
-        glow.addColorStop(0, rgba(CRIMSON, glowA * pGlow));
-        glow.addColorStop(0.45, rgba(CRIMSON, glowA * 0.45 * pGlow));
+        glow.addColorStop(0, rgba(ACCENT, glowA * pGlow));
+        glow.addColorStop(0.45, rgba(ACCENT, glowA * 0.45 * pGlow));
         glow.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = glow;
         ctx.fillRect(cx - R * 2.4, cy - R * 2.4, R * 4.8, R * 4.8);
         const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.9);
-        core.addColorStop(0, rgba(GOLD, 0.1 * pLetters * pGlow));
+        core.addColorStop(0, rgba(DEEP, 0.1 * pLetters * pGlow));
         core.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = core;
         ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
@@ -223,10 +226,10 @@ export default function Intro({ onDone }: { onDone: () => void }) {
       // circular portal — crimson arc draws itself, gold dashed orbit ring
       if (pPortal > 0) {
         ctx.save();
-        ctx.shadowColor = rgba(CRIMSON, 0.85 * pPortal);
+        ctx.shadowColor = rgba(ACCENT, 0.85 * pPortal);
         ctx.shadowBlur = 26 * pPortal;
         ctx.lineWidth = 2.6;
-        ctx.strokeStyle = rgba(CRIMSON, 0.9 * pPortal * pIn);
+        ctx.strokeStyle = rgba(ACCENT, 0.9 * pPortal * pIn);
         ctx.beginPath();
         ctx.arc(cx, cy, R * pulse, -Math.PI / 2, -Math.PI / 2 + pPortal * Math.PI * 2);
         ctx.stroke();
@@ -241,7 +244,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
         ctx.rotate(t * 0.00012);
         ctx.setLineDash([1.5, 9]);
         ctx.lineWidth = 1.2;
-        ctx.strokeStyle = rgba(GOLD, 0.55 * pPortal * pIn);
+        ctx.strokeStyle = rgba(DEEP, 0.55 * pPortal * pIn);
         ctx.beginPath();
         ctx.arc(0, 0, R * 1.18 * pulse, 0, Math.PI * 2);
         ctx.stroke();
@@ -270,7 +273,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
     <div
       role="dialog"
       aria-label="Anime BGC intro"
-      className={`fixed inset-0 z-[100] select-none bg-[#060608] transition-all duration-700 ease-out ${
+      className={`fixed inset-0 z-[100] select-none bg-[#080808] transition-all duration-700 ease-out ${
         exiting ? "pointer-events-none scale-[1.04] opacity-0" : "opacity-100"
       }`}
     >
@@ -278,7 +281,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
       {/* BGC wordmark — DOM text stays crisp, centered and readable */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="bgc-caption text-[11px] font-semibold uppercase tracking-[0.55em] text-[#d9b26a]/90 sm:text-xs">
+        <span className="bgc-caption text-[11px] font-semibold uppercase tracking-[0.55em] text-primary/90 sm:text-xs">
           Anime
         </span>
         <h1 className="mt-3 flex items-baseline font-display text-[clamp(4.5rem,20vw,10rem)] font-extrabold leading-none tracking-tight">
@@ -294,7 +297,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
             </span>
           ))}
         </h1>
-        <span className="bgc-rule mt-6 block h-px w-40 bg-gradient-to-r from-transparent via-[#d9b26a]/80 to-transparent" />
+        <span className="bgc-rule mt-6 block h-px w-40 bg-gradient-to-r from-transparent via-primary/80 to-transparent" />
       </div>
 
       <button
