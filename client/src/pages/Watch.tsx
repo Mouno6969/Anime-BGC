@@ -242,11 +242,13 @@ export default function Watch() {
               {anime?.title ?? (infoLoading ? "Loading…" : "Unknown title")}
             </h1>
             {anime && (
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/80">
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/80">
                 <span className="flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 text-xs font-semibold">
                   <Tv className="h-3.5 w-3.5" /> {anime.type}
                 </span>
-                <span className="flex items-center gap-1.5">
+                {/* Episode count promoted to a lavender badge so it stays easy to
+                    spot even next to the watchlist control on small screens. */}
+                <span className="flex items-center gap-1.5 rounded-md bg-primary/20 px-2 py-1 text-xs font-bold text-primary">
                   <Play className="h-3.5 w-3.5 fill-current" /> {anime.episodes} eps
                 </span>
                 {anime.score > 0 && (
@@ -254,10 +256,12 @@ export default function Watch() {
                     <Star className="h-3.5 w-3.5 fill-amber-300" /> {(anime.score / 10).toFixed(1)}
                   </span>
                 )}
-                <span className="flex items-center gap-1.5">
+                <span className="hidden items-center gap-1.5 sm:flex">
                   <Clock className="h-3.5 w-3.5" /> {anime.duration}
                 </span>
-                {anime.year > 0 && <span>{anime.year}</span>}
+                {anime.year > 0 && <span className="hidden sm:inline">{anime.year}</span>}
+                {/* Compact icon-first bookmark: full label on sm+ screens, short
+                    "Save"/"Saved" on mobile so the row never crowds. */}
                 <button
                   onClick={() => {
                     if (!anime) return;
@@ -266,15 +270,17 @@ export default function Watch() {
                       description: anime.title,
                     });
                   }}
+                  aria-label={saved ? "Remove from Watchlist" : "Add to Watchlist"}
                   className={cn(
-                    "ml-1 flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold backdrop-blur-md transition-all active:scale-95",
+                    "ml-auto flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold backdrop-blur-md transition-all active:scale-95 sm:ml-1",
                     saved
                       ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "border-primary/60 bg-black/50 text-primary hover:bg-primary hover:text-primary-foreground",
                   )}
                 >
                   {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-                  {saved ? "In Watchlist" : "Add to Watchlist"}
+                  <span className="hidden sm:inline">{saved ? "In Watchlist" : "Add to Watchlist"}</span>
+                  <span className="sm:hidden">{saved ? "Saved" : "Save"}</span>
                 </button>
               </div>
             )}
