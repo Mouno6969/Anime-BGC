@@ -11,6 +11,8 @@ import * as anilist from "./lib/anilist.js";
 import * as miruro from "./lib/miruro.js";
 import * as comments from "./lib/comments.js";
 import * as notifications from "./lib/notifications.js";
+import { handleAdminApi } from "./admin-api.js";
+import { AdminError } from "./lib/admin.js";
 import { proxyStream, type ProxyResult } from "./lib/proxy.js";
 
 export interface ApiResponse {
@@ -48,6 +50,11 @@ export async function handleApi(
   const q = url.searchParams;
 
   try {
+    // ---- Admin control center (token-gated) ---------------------------------
+    if (path.startsWith("/api/admin/")) {
+      return await handleAdminApi(method, rawUrl, ctx);
+    }
+
     // ---- Discovery / lists --------------------------------------------------
     if (path === "/api/trending") {
       return ok(await anilist.getTrending(num(q.get("page"), 1), num(q.get("perPage"), 24)));
@@ -186,7 +193,7 @@ export async function handleApi(
 
     return { status: 404, body: { error: `Unknown API route: ${path}` } };
   } catch (err) {
-    if (err instanceof comments.CommentError || err instanceof notifications.NotificationError) {
+    if (err instanceof comments.CommentError || err instanceof notifications.NotificationError || err instanceof AdminError) {
       return { status: err.status, body: { error: err.message } };
     }
     const message = err instanceof Error ? err.message : String(err);
@@ -228,3 +235,4 @@ export async function handleProxy(
     };
   }
 }
+

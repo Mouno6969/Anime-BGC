@@ -377,3 +377,92 @@ export function setHidden(id: string, hidden: boolean, adminToken: unknown) {
   persist();
   return { ok: true, isHidden: c.isHidden };
 }
+
+/* --------------------------- admin / moderation ---------------------------- */
+
+export interface AdminCommentView {
+  id: string;
+  content: string;
+  guestId: string;
+  name: string;
+  body: string;
+  parentId: string | null;
+  isSpoiler: boolean;
+  isPinned: boolean;
+  isHidden: boolean;
+  isDeleted: boolean;
+  likeCount: number;
+  reportCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function adminList(filter: string, page: number): { total: number; pages: number; comments: AdminCommentView[] } {
+  load();
+  let list = [...comments];
+  switch (filter) {
+    case "reported":
+      list = list.filter((c) => c.reportedBy.length > 0 && !c.isDeleted);
+      break;
+    case "hidden":
+      list = list.filter((c) => c.isHidden);
+      break;
+    case "deleted":
+      list = list.filter((c) => c.isDeleted);
+      break;
+    default:
+      list = list.filter((c) => !c.isDeleted);
+  }
+  list.sort((a, b) => b.createdAt - a.createdAt);
+  const per = 30;
+  const pages = Math.max(1, Math.ceil(list.length / per));
+  const p = Math.min(Math.max(1, page), pages);
+  return {
+    total: list.length,
+    pages,
+    comments: list.slice((p - 1) * per, p * per).map((c) => ({
+      id: c.id,
+      content: c.content,
+      guestId: c.guestId,
+      name: c.name,
+      body: c.body,
+      parentId: c.parentId,
+      isSpoiler: c.isSpoiler,
+      isPinned: c.isPinned,
+      isHidden: c.isHidden,
+      isDeleted: c.isDeleted,
+      likeCount: c.likedBy.length,
+      reportCount: c.reportedBy.length,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    })),
+  };
+}
+
+export function adminStats(): { total: number; reported: number; hidden: number; deleted: number } {
+  load();
+  return {
+    total: comments.filter((c) => !c.isDeleted).length,
+    reported: comments.filter((c) => c.reportedBy.length > 0 && !c.isDeleted && !c.isHidden).length,
+    hidden: comments.filter((c) => c.isHidden).length,
+    deleted: comments.filter((c) => c.isDeleted).length,
+  };
+}
+
+export function adminResolveReports(id: string, adminToken: unknown) {
+  if (!isAdmin(adminToken)) throw new CommentError(403, "Moderation requires admin access.");
+  const c = comments.find((x) => x.id === id);
+  if (!c) throw new CommentError(404, "Comment not found.");
+  c.reportedBy = [];
+  persist();
+  return { ok: true };
+}
+
+/** Admin bulk purge helper (used by tests/cleanup). */
+export function adminPurgeContent(content: string, adminToken: unknown): { removed: number } {
+  if (!isAdmin(adminToken)) throw new CommentError(403, "Moderation requires admin access.");
+  const before = comments.length;
+  comments = comments.filter((c) => c.content !== content);
+  if (comments.length !== before) persist();
+  return { removed: before - comments.length };
+}

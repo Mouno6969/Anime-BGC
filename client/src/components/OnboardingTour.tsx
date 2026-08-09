@@ -19,6 +19,8 @@ export default function OnboardingTour() {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
+    // Never interrupt the admin panel with the user tour.
+    if (window.location.pathname.startsWith("/admin")) return;
     const state = getOnboarding();
     if (state?.status === "in-progress") {
       setStep(state.step);

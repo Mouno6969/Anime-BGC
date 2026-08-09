@@ -314,3 +314,68 @@ export function filePlaybackReport(input: Record<string, unknown>, guestId: stri
   } catch { /* best effort */ }
   return { ok: true };
 }
+
+/* ------------------------------ admin extras ------------------------------- */
+
+export function adminListBroadcasts(token: unknown): Broadcast[] {
+  load();
+  if (!isAdmin(token)) throw new NotificationError(403, "Admin access required.");
+  return [...broadcasts].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function adminUpdate(id: string, input: Record<string, unknown>, token: unknown) {
+  load();
+  if (!isAdmin(token)) throw new NotificationError(403, "Admin access required.");
+  const b = broadcasts.find((x) => x.id === id);
+  if (!b) throw new NotificationError(404, "Notification not found.");
+  const title = cleanText(input.title, 120);
+  const body = cleanText(input.body, 500);
+  if (title) b.title = title;
+  if (body) b.body = body;
+  if (input.category) b.category = cleanText(input.category, 20) as NotificationCategory;
+  if (input.priority) b.priority = cleanText(input.priority, 10) as NotificationPriority;
+  if (typeof input.actionLabel === "string") b.actionLabel = cleanText(input.actionLabel, 40) ?? undefined;
+  if (typeof input.actionUrl === "string" && /^\/[A-Za-z0-9/?=&%-]*$/.test(input.actionUrl)) b.actionUrl = input.actionUrl;
+  persist();
+  return b;
+}
+
+export function adminDelete(id: string, token: unknown) {
+  load();
+  if (!isAdmin(token)) throw new NotificationError(403, "Admin access required.");
+  const before = broadcasts.length;
+  broadcasts = broadcasts.filter((x) => x.id !== id);
+  if (broadcasts.length === before) throw new NotificationError(404, "Notification not found.");
+  persist();
+  return { ok: true };
+}
+
+/* ------------------------- playback reports (admin) ------------------------ */
+
+export interface PlaybackReport {
+  id: string;
+  guestId: string;
+  animeId: number | null;
+  episode: number | null;
+  provider: string | null;
+  errorCode: string | null;
+  playerState: string | null;
+  browser: string | null;
+  createdAt: number;
+}
+
+export function adminPlaybackReports(page: number, token: unknown): { total: number; pages: number; reports: PlaybackReport[] } {
+  if (!isAdmin(token)) throw new NotificationError(403, "Admin access required.");
+  let list: PlaybackReport[] = [];
+  try {
+    if (existsSync(REPORT_FILE)) {
+      const raw = JSON.parse(readFileSync(REPORT_FILE, "utf8"));
+      list = Array.isArray(raw.reports) ? raw.reports : [];
+    }
+  } catch { list = []; }
+  list.sort((a, b) => b.createdAt - a.createdAt);
+  const per = 30;
+  const pages = Math.max(1, Math.ceil(list.length / per));
+  const p = Math.min(Math.max(1, page), pages);
+  return { total: list.length, pages, reports: list.slice((p - 1) * per, p * per) };
+}
