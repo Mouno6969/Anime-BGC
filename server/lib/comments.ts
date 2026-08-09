@@ -261,7 +261,10 @@ export function addComment(input: {
 }): PublicComment {
   load();
   if (!validContentKey(input.content)) throw new CommentError(400, "Invalid content id.");
-  if (!validGuestId(input.guestId)) throw new CommentError(401, "Missing guest identity.");
+  if (!validGuestId(input.guestId)) {
+    console.warn("[comments] rejected guest id:", JSON.stringify(input.guestId));
+    throw new CommentError(401, "Missing guest identity.");
+  }
   const body = sanitizeBody(input.body);
   if (!body) throw new CommentError(400, "Comment cannot be empty.");
 
