@@ -226,7 +226,25 @@ function vitePluginAnimeApi(): Plugin {
             res.end(proxied.body);
             return;
           }
-          const result = await handleApi(req.method ?? "GET", fullUrl);
+          const body = await new Promise<unknown>((resolve) => {
+            if (req.method === "GET" || req.method === "HEAD") return resolve(undefined);
+            let raw = "";
+            req.on("data", (c) => {
+              raw += c;
+              if (raw.length > 32_768) resolve(undefined); // cap
+            });
+            req.on("end", () => {
+              try {
+                resolve(raw ? JSON.parse(raw) : undefined);
+              } catch {
+                resolve(undefined);
+              }
+            });
+          });
+          const result = await handleApi(req.method ?? "GET", fullUrl, {
+            body,
+            headers: req.headers,
+          });
           if (!result) {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: "Not found" }));

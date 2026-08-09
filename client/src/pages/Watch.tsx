@@ -10,6 +10,7 @@ import { ArrowLeft, Play, Star, Tv, Clock, Bookmark, BookmarkCheck, Loader2 } fr
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import VideoPlayer from "@/components/VideoPlayer";
+import Comments from "@/components/Comments";
 import { ErrorState } from "@/components/Skeletons";
 import { api, useAsync } from "@/lib/api";
 import { useWatchlist } from "@/lib/watchlist";
@@ -392,6 +393,10 @@ export default function Watch() {
                 ))}
               </div>
             ) : null}
+
+            {selected && (
+              <Comments contentKey={`${id}:${selected.number}`} />
+            )}
           </div>
 
           {/* episodes list */}

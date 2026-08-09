@@ -9,12 +9,23 @@
  */
 import * as anilist from "./lib/anilist.js";
 import * as miruro from "./lib/miruro.js";
+import * as comments from "./lib/comments.js";
 import { proxyStream, type ProxyResult } from "./lib/proxy.js";
 
 export interface ApiResponse {
   status: number;
   body: unknown;
 }
+
+export interface ApiContext {
+  body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+}
+
+const headerStr = (ctx: ApiContext | undefined, name: string): string => {
+  const v = ctx?.headers?.[name];
+  return Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+};
 
 const num = (v: string | null, d: number): number => {
   const n = v ? parseInt(v, 10) : NaN;
@@ -28,6 +39,7 @@ const num = (v: string | null, d: number): number => {
 export async function handleApi(
   method: string,
   rawUrl: string,
+  ctx?: ApiContext,
 ): Promise<ApiResponse | null> {
   const url = new URL(rawUrl, "http://localhost");
   const path = url.pathname;
@@ -110,8 +122,50 @@ export async function handleApi(
       return ok(miruro.providerHealth());
     }
 
+    // ---- Comments -------------------------------------------------------------
+    if (path === "/api/comments" && method === "GET") {
+      const content = q.get("content") ?? "";
+      const sort = (q.get("sort") ?? "newest") as comments.SortMode;
+      const page = num(q.get("page"), 1);
+      return ok(comments.getComments(content, sort, page, headerStr(ctx, "x-guest-id")));
+    }
+    if (path === "/api/comments/count" && method === "GET") {
+      return ok({ count: comments.getCount(q.get("content") ?? "") });
+    }
+    if (path === "/api/comments" && method === "POST") {
+      const b = (ctx?.body ?? {}) as Record<string, unknown>;
+      const created = comments.addComment({
+        content: String(b.content ?? ""),
+        guestId: headerStr(ctx, "x-guest-id"),
+        ip: headerStr(ctx, "x-forwarded-for") || "local",
+        name: b.name,
+        body: b.body,
+        parentId: b.parentId ?? null,
+        isSpoiler: b.isSpoiler,
+      });
+      return { status: 201, body: created };
+    }
+    const commentMatch = path.match(/^\/api\/comments\/([A-Za-z0-9-]+)(\/(like|report|pin|hide))?$/);
+    if (commentMatch) {
+      const id = commentMatch[1];
+      const action = commentMatch[3];
+      const guestId = headerStr(ctx, "x-guest-id");
+      const adminToken = headerStr(ctx, "x-admin-token");
+      const b = (ctx?.body ?? {}) as Record<string, unknown>;
+      if (!action && method === "PATCH") return ok(comments.editComment(id, guestId, b.body));
+      if (!action && method === "DELETE") return ok(comments.deleteComment(id, guestId, adminToken));
+      if (action === "like" && method === "POST") return ok(comments.toggleLike(id, guestId));
+      if (action === "report" && method === "POST") return ok(comments.reportComment(id, guestId));
+      if (action === "pin" && method === "POST") return ok(comments.setPinned(id, b.pinned !== false, adminToken));
+      if (action === "hide" && method === "POST") return ok(comments.setHidden(id, b.hidden !== false, adminToken));
+      return { status: 405, body: { error: "Method not allowed" } };
+    }
+
     return { status: 404, body: { error: `Unknown API route: ${path}` } };
   } catch (err) {
+    if (err instanceof comments.CommentError) {
+      return { status: err.status, body: { error: err.message } };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { status: 502, body: { error: message } };
   }

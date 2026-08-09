@@ -9,6 +9,8 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
+  app.set("trust proxy", true);
+  app.use(express.json({ limit: "32kb" }));
   const server = createServer(app);
 
   // ---- JSON API (AniList + Miruro) -----------------------------------------
@@ -23,7 +25,10 @@ async function startServer() {
         res.end(proxied.body);
         return;
       }
-      const result = await handleApi(req.method ?? "GET", fullUrl);
+      const result = await handleApi(req.method ?? "GET", fullUrl, {
+        body: req.body,
+        headers: req.headers,
+      });
       if (!result) {
         res.status(404).json({ error: "Not found" });
         return;

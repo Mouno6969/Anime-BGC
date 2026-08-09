@@ -5,6 +5,7 @@
  * data with minimal change.
  */
 import { useEffect, useRef, useState } from "react";
+import { getGuestId } from "./avatar";
 import type {
   Anime,
   EpisodesResult,
@@ -13,8 +14,8 @@ import type {
   SourcesResult,
 } from "@shared/anime";
 
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
+async function getJson<T>(url: string, signal?: AbortSignal, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, { signal, ...init });
   if (!res.ok) {
     let detail = "";
     try {
@@ -128,4 +129,94 @@ export function useAsync<T>(
   }, deps);
 
   return state;
+}
+
+/* ------------------------------- comments --------------------------------- */
+
+export interface ApiComment {
+  id: string;
+  content: string;
+  guestId: string;
+  name: string;
+  body: string;
+  parentId: string | null;
+  isSpoiler: boolean;
+  isPinned: boolean;
+  likeCount: number;
+  replyCount: number;
+  replies?: ApiComment[];
+  createdAt: number;
+  updatedAt: number;
+  likedByMe: boolean;
+  reportedByMe: boolean;
+  mine: boolean;
+}
+
+export interface CommentPage {
+  total: number;
+  page: number;
+  pages: number;
+  comments: ApiComment[];
+}
+
+export type CommentSort = "top" | "newest" | "oldest" | "replies";
+
+function guestHeaders(): Record<string, string> {
+  return { "x-guest-id": getGuestId() };
+}
+
+export async function fetchComments(
+  content: string,
+  sort: CommentSort,
+  page: number,
+): Promise<CommentPage> {
+  const params = new URLSearchParams({ content, sort, page: String(page) });
+  return getJson<CommentPage>(`/api/comments?${params}`, undefined, { headers: guestHeaders() });
+}
+
+export async function postComment(input: {
+  content: string;
+  name: string;
+  body: string;
+  parentId?: string | null;
+  isSpoiler?: boolean;
+}): Promise<ApiComment> {
+  return getJson<ApiComment>("/api/comments", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guestHeaders() },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function editComment(id: string, body: string): Promise<ApiComment> {
+  return getJson<ApiComment>(`/api/comments/${id}`, undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...guestHeaders() },
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function deleteComment(id: string): Promise<{ ok: boolean }> {
+  return getJson<{ ok: boolean }>(`/api/comments/${id}`, undefined, { method: "DELETE", headers: guestHeaders() });
+}
+
+export async function toggleLike(id: string): Promise<{ liked: boolean; likeCount: number }> {
+  return getJson<{ liked: boolean; likeCount: number }>(`/api/comments/${id}/like`, undefined, { method: "POST", headers: guestHeaders() });
+}
+
+export async function reportComment(id: string): Promise<{ reported: boolean }> {
+  return getJson<{ reported: boolean }>(`/api/comments/${id}/report`, undefined, { method: "POST", headers: guestHeaders() });
+}
+
+export async function moderateComment(
+  id: string,
+  action: "pin" | "hide",
+  value: boolean,
+  adminToken: string,
+): Promise<unknown> {
+  return getJson<unknown>(`/api/comments/${id}/${action}`, undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-token": adminToken },
+    body: JSON.stringify(action === "pin" ? { pinned: value } : { hidden: value }),
+  });
 }
