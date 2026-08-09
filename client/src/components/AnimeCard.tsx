@@ -62,9 +62,10 @@ export default function AnimeCard({
           </span>
         </div>
 
-        {/* bottom meta strip */}
+        {/* bottom meta strip — the bookmark sits above this row, so the full
+            "year · N eps" line is always readable with nothing overlapping it */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2.5 pt-8">
-          <div className="flex items-center gap-2 text-[11px] text-white/70">
+          <div className="flex items-center gap-2 whitespace-nowrap text-[11px] font-medium text-white/80">
             {anime.year > 0 && <span>{anime.year}</span>}
             {anime.year > 0 && <span className="h-1 w-1 rounded-full bg-white/40" />}
             <span>{anime.episodes} eps</span>
@@ -83,7 +84,7 @@ export default function AnimeCard({
             });
           }}
           className={cn(
-            "absolute bottom-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full backdrop-blur-sm transition-all active:scale-90",
+            "absolute bottom-11 right-2 z-10 grid h-8 w-8 place-items-center rounded-full backdrop-blur-sm transition-all active:scale-90",
             saved
               ? "bg-primary text-primary-foreground shadow-md shadow-primary/40"
               : "bg-black/65 text-white/85 hover:bg-black/85 hover:text-primary",
