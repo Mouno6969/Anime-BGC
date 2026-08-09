@@ -17,6 +17,12 @@ const GUEST_KEY = "anime-bgc:guest-id:v1";
 export function getGuestId(): string {
   try {
     let id = localStorage.getItem(GUEST_KEY);
+    // Legacy ids could contain dots (old Math.random fallback) — normalize once.
+    if (id && !/^[A-Za-z0-9:_-]{8,80}$/.test(id)) {
+      id = id.replace(/[^A-Za-z0-9:_-]/g, "").slice(0, 80);
+      if (id.length >= 8) localStorage.setItem(GUEST_KEY, id);
+      else id = null;
+    }
     if (!id) {
       id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
       localStorage.setItem(GUEST_KEY, id);

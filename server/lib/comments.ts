@@ -101,7 +101,7 @@ function sanitizeName(input: unknown): string {
 }
 
 function validGuestId(id: unknown): id is string {
-  return typeof id === "string" && /^[A-Za-z0-9:_-]{8,80}$/.test(id);
+  return typeof id === "string" && /^[A-Za-z0-9:._-]{8,90}$/.test(id);
 }
 
 function validContentKey(key: unknown): key is string {
