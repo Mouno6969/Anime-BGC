@@ -147,6 +147,46 @@ export interface RaceCandidate {
 
 const RACE_TIMEOUT_MS = 25_000;
 
+/* ------------------------- stream result cache -----------------------------
+ * Winning race results are cached briefly so re-opening an episode (or
+ * failover re-races with different excludes) does not re-hit the upstream
+ * providers — the biggest driver of the HTTP 429 rate limiting that caused
+ * long "Fetching stream…" stalls. Entries auto-expire; negative results are
+ * cached very briefly to absorb request bursts without hammering upstreams.
+ */
+interface CacheEntry {
+  result: RacedSourcesResult | null; // null = negative (failure) cache
+  expires: number;
+}
+const raceCache = new Map<string, CacheEntry>();
+const POS_TTL_MS = 30 * 60_000; // 30 min for a winning stream set
+const NEG_TTL_MS = 45_000;      // 45s for "all providers failed"
+
+function cacheKey(anilistId: number, category: string, exclude: string[]): string {
+  return `${anilistId}:${category}:${[...exclude].sort().join(",")}`;
+}
+
+function cacheGet(key: string): RacedSourcesResult | null | undefined {
+  const e = raceCache.get(key);
+  if (!e) return undefined;
+  if (Date.now() > e.expires) {
+    raceCache.delete(key);
+    return undefined;
+  }
+  return e.result;
+}
+
+function cacheSet(key: string, result: RacedSourcesResult | null): void {
+  raceCache.set(key, {
+    result,
+    expires: Date.now() + (result ? POS_TTL_MS : NEG_TTL_MS),
+  });
+  if (raceCache.size > 500) {
+    const now = Date.now();
+    raceCache.forEach((v, k) => { if (v.expires < now) raceCache.delete(k); });
+  }
+}
+
 /**
  * Fire all candidate providers concurrently; the first one returning a
  * playable stream wins, all losers are aborted immediately. Health stats are
@@ -158,6 +198,12 @@ export async function raceSources(
   category: "sub" | "dub",
   exclude: string[] = [],
 ): Promise<RacedSourcesResult> {
+  const key = cacheKey(anilistId, category, exclude);
+  const cached = cacheGet(key);
+  if (cached !== undefined) {
+    if (cached === null) throw new Error("No playable source found for this episode across providers. (cached)");
+    return cached;
+  }
   const pool = candidates
     .filter((c) => !exclude.includes(c.provider))
     .sort((a, b) => healthScore(b.provider) - healthScore(a.provider));
@@ -208,8 +254,10 @@ export async function raceSources(
   });
 
   if (!settled) {
+    cacheSet(key, null);
     throw new Error("No playable source found for this episode across providers.");
   }
+  cacheSet(key, settled);
   return settled;
 }
 
