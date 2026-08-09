@@ -10,6 +10,7 @@
 import * as anilist from "./lib/anilist.js";
 import * as miruro from "./lib/miruro.js";
 import * as comments from "./lib/comments.js";
+import * as notifications from "./lib/notifications.js";
 import { proxyStream, type ProxyResult } from "./lib/proxy.js";
 
 export interface ApiResponse {
@@ -161,9 +162,31 @@ export async function handleApi(
       return { status: 405, body: { error: "Method not allowed" } };
     }
 
+    // ---- Notifications -------------------------------------------------------
+    if (path === "/api/notifications" && method === "GET") {
+      return ok(notifications.listForGuest(headerStr(ctx, "x-guest-id")));
+    }
+    if (path === "/api/notifications/read-all" && method === "POST") {
+      return ok(notifications.markAllRead(headerStr(ctx, "x-guest-id")));
+    }
+    if (path === "/api/notifications" && method === "POST") {
+      return { status: 201, body: notifications.adminCreate((ctx?.body ?? {}) as Record<string, unknown>, headerStr(ctx, "x-admin-token")) };
+    }
+    const notifMatch = path.match(/^\/api\/notifications\/([A-Za-z0-9-]+)\/(read|dismiss|enable)$/);
+    if (notifMatch && method === "POST") {
+      const [, id, action] = notifMatch;
+      const b = (ctx?.body ?? {}) as Record<string, unknown>;
+      if (action === "read") return ok(notifications.markRead(headerStr(ctx, "x-guest-id"), id));
+      if (action === "dismiss") return ok(notifications.dismiss(headerStr(ctx, "x-guest-id"), id));
+      return ok(notifications.adminSetEnabled(id, b.enabled !== false, headerStr(ctx, "x-admin-token")));
+    }
+    if (path === "/api/playback/report" && method === "POST") {
+      return ok(notifications.filePlaybackReport((ctx?.body ?? {}) as Record<string, unknown>, headerStr(ctx, "x-guest-id")));
+    }
+
     return { status: 404, body: { error: `Unknown API route: ${path}` } };
   } catch (err) {
-    if (err instanceof comments.CommentError) {
+    if (err instanceof comments.CommentError || err instanceof notifications.NotificationError) {
       return { status: err.status, body: { error: err.message } };
     }
     const message = err instanceof Error ? err.message : String(err);

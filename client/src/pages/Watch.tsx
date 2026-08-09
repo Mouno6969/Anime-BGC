@@ -298,6 +298,9 @@ export default function Watch() {
                 nextEpisode={nextEpisode ? { number: nextEpisode.number, title: nextEpisode.title } : null}
                 onNextEpisode={nextEpisode ? () => setEpNumber(nextEpisode.number) : undefined}
                 onFatalError={handleFatalError}
+                providerLabel={activeProvider ? serverLabel(activeProvider) : undefined}
+                hasAltServers={(eps?.providers.length ?? 0) > 1}
+                onChangeServer={() => setProvider("auto")}
               />
             ) : (
               <div className="grid aspect-video w-full place-items-center rounded-2xl border border-border bg-card/60">

@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { AlertTriangle, Loader2, Play, Pause } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, reportPlaybackIssue } from "@/lib/api";
 import type { StreamSource, SubtitleTrack } from "@shared/anime";
 import { cn } from "@/lib/utils";
 import ControlsBar, { type PlayerMenu } from "./player/ControlsBar";
@@ -27,6 +27,24 @@ const RATE_KEY = "anime-bgc:rate";
 const VOL_KEY = "anime-bgc:volume";
 const CC_KEY = "anime-bgc:cc-label";
 const HIDE_DELAY = 3000;
+
+/** Map technical playback failures to friendly, honest explanations. */
+function friendlyError(code: string | null): string {
+  switch (code) {
+    case "network":
+      return "Your connection appears to have interrupted the playback request. Retry or switch networks.";
+    case "timeout":
+      return "The source took too long to respond. Retry or switch to another server.";
+    case "unsupported":
+      return "This browser may not support the format being delivered. Try updating your browser or another supported browser.";
+    case "manifest":
+      return "The video stream information could not be loaded. Retry or choose another server.";
+    case "buffering":
+      return "Your connection may not be fast or stable enough for this stream. Try a lower quality if available.";
+    default:
+      return "This video source isn't responding right now. Try another server — or retry in a moment.";
+  }
+}
 
 function readNumber(key: string, fallback: number): number {
   try {
@@ -48,6 +66,9 @@ export default function VideoPlayer({
   nextEpisode = null,
   onNextEpisode,
   onFatalError,
+  providerLabel,
+  hasAltServers = false,
+  onChangeServer,
 }: {
   source: StreamSource | null;
   subtitles?: SubtitleTrack[];
@@ -59,6 +80,9 @@ export default function VideoPlayer({
   nextEpisode?: NextEpisodeInfo | null;
   onNextEpisode?: () => void;
   onFatalError?: () => void;
+  providerLabel?: string;
+  hasAltServers?: boolean;
+  onChangeServer?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +104,10 @@ export default function VideoPlayer({
   const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [quality, setQuality] = useState(-1); // -1 = Auto (ABR)
   const [autoLevel, setAutoLevel] = useState(-1);
@@ -398,12 +425,13 @@ export default function VideoPlayer({
     // Report a fatal error at most once per source (late timers/events from a
     // dead source must not blame the failover replacement).
     let fatalSent = false;
-    const reportFatal = () => {
+    const reportFatal = (code = "source_unavailable") => {
       if (fatalSent) return;
       fatalSent = true;
       setLoading(false);
       setBuffering(false);
-      setError("This stream could not be loaded. Pick another server or episode.");
+      setErrorCode(code);
+      setError("Playback couldn't start.");
       fatalRef.current?.();
     };
 
@@ -455,7 +483,7 @@ export default function VideoPlayer({
     const onWaiting = () => {
       setBuffering(true);
       window.clearTimeout(starveTimer);
-      starveTimer = window.setTimeout(() => reportFatal(), 15_000);
+      starveTimer = window.setTimeout(() => reportFatal(navigator.onLine === false ? "network" : "buffering"), 15_000);
     };
     const onPlaying = () => {
       setBuffering(false);
@@ -475,12 +503,18 @@ export default function VideoPlayer({
     // leave native video stuck with no error event) is treated as fatal after
     // 20s so auto-failover can switch servers. Cleared once playback starts.
     const stallTimer = window.setTimeout(() => {
-      if (video.readyState < 2) reportFatal();
+      if (video.readyState < 2) reportFatal("timeout");
     }, 20_000);
     // Native (mp4 / Safari HLS) fatal load error -> report for auto-failover.
     const onVideoError = () => {
       if (!video.error) return; // emptied src during cleanup also fires this
-      reportFatal();
+      const code =
+        video.error.code === MediaError.MEDIA_ERR_NETWORK
+          ? "network"
+          : video.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+            ? "unsupported"
+            : "source_unavailable";
+      reportFatal(code);
     };
 
     video.addEventListener("loadedmetadata", onLoadedMetadata);
@@ -520,7 +554,7 @@ export default function VideoPlayer({
               netErrors += 1;
               if (netErrors >= 3) {
                 hls?.destroy();
-                reportFatal();
+                reportFatal(navigator.onLine === false ? "network" : "source_unavailable");
               } else {
                 hls?.startLoad();
               }
@@ -530,7 +564,7 @@ export default function VideoPlayer({
               break;
             default:
               hls?.destroy();
-              reportFatal();
+              reportFatal(data.details?.includes("manifest") ? "manifest" : "source_unavailable");
           }
         }
       });
@@ -795,18 +829,83 @@ export default function VideoPlayer({
           </div>
         ))}
 
-      {/* error overlay */}
+      {/* error overlay — smart playback help */}
       {error && (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/80 text-center">
-          <div>
-            <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
-            <p className="mt-3 max-w-sm px-6 text-sm text-white/80">{error}</p>
+        <div className="absolute inset-0 z-30 grid place-items-center overflow-y-auto bg-black/85 p-4 text-center">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0c0c0f]/95 p-5 text-left shadow-2xl">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-destructive" />
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-white">Playback couldn't start</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/60">
+                  {friendlyError(errorCode)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReportSent(false);
+                  setRetryTick((t) => t + 1);
+                }}
+                className="rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground transition hover:brightness-110"
+              >
+                Retry
+              </button>
+              {hasAltServers && onChangeServer && (
+                <button
+                  type="button"
+                  onClick={onChangeServer}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/90 transition hover:bg-white/10"
+                >
+                  Change server
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/90 transition hover:bg-white/10"
+              >
+                Refresh page
+              </button>
+              <button
+                type="button"
+                onClick={() => setHelpOpen((v) => !v)}
+                className="rounded-full px-3 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
+              >
+                {helpOpen ? "Hide tips" : "More tips"}
+              </button>
+            </div>
+
+            {helpOpen && (
+              <ol className="mt-4 list-decimal space-y-2 pl-5 text-xs leading-relaxed text-white/70">
+                <li>Retry — temporary network or source issues often resolve on a second attempt.</li>
+                {hasAltServers && <li>Change server — another source may respond faster right now.</li>}
+                <li>Check your connection — switch Wi-Fi/mobile data or pause heavy downloads.</li>
+                <li>Refresh the page — rebuilds a stuck playback session.</li>
+                <li>Update your browser, or try private mode / another supported browser.</li>
+              </ol>
+            )}
+
             <button
               type="button"
-              onClick={() => setRetryTick((t) => t + 1)}
-              className="mt-4 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              disabled={reportSent}
+              onClick={() => {
+                setReportSent(true);
+                void reportPlaybackIssue({
+                  animeId,
+                  episode: episodeNumber,
+                  provider: providerLabel,
+                  errorCode: errorCode ?? undefined,
+                  playerState: `readyState=${videoRef.current?.readyState ?? 0}`,
+                  browser: navigator.userAgent.slice(0, 80),
+                });
+              }}
+              className="mt-4 text-[11px] font-semibold text-white/50 underline decoration-dotted underline-offset-2 transition hover:text-white/80 disabled:no-underline disabled:opacity-60"
             >
-              Retry
+              {reportSent ? "Report sent — thank you" : "Still not working? Report this issue"}
             </button>
           </div>
         </div>

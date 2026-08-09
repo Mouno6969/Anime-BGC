@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Intro from "./components/Intro";
+import OnboardingTour from "./components/OnboardingTour";
 import { shouldShowIntro } from "./lib/intro";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -40,6 +41,7 @@ function App() {
           <Toaster />
           <Router />
           {introVisible && <Intro onDone={() => setIntroVisible(false)} />}
+          {!introVisible && <OnboardingTour />}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

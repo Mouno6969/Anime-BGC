@@ -11,6 +11,7 @@ import { LOGO, featured } from "@/lib/animeData";
 import { api } from "@/lib/api";
 import { getAvatarDataUri } from "@/lib/avatar";
 import ProfileDialog from "@/components/ProfileDialog";
+import NotificationCenter, { useUnreadCount } from "@/components/NotificationCenter";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -36,6 +37,8 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const unread = useUnreadCount();
   const [term, setTerm] = useState("");
   const [avatarUrl] = useState(() => getAvatarDataUri());
   const [, navigate] = useLocation();
@@ -151,11 +154,17 @@ export default function Header() {
             <Shuffle className="h-5 w-5" />
           </button>
           <button
-            onClick={() => soon("Notifications")}
-            className="grid h-9 w-9 place-items-center rounded-lg text-foreground/80 transition-colors hover:bg-white/10"
+            onClick={() => setNotifOpen((v) => !v)}
+            className="relative grid h-9 w-9 place-items-center rounded-lg text-foreground/80 transition-colors hover:bg-white/10"
             aria-label="Notifications"
+            aria-expanded={notifOpen}
           >
             <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-extrabold text-primary-foreground">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setProfileOpen(true)}
@@ -207,6 +216,7 @@ export default function Header() {
     )}
 
     <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} avatarUrl={avatarUrl} />
+    <NotificationCenter open={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   );
 }

@@ -220,3 +220,48 @@ export async function moderateComment(
     body: JSON.stringify(action === "pin" ? { pinned: value } : { hidden: value }),
   });
 }
+
+/* ----------------------------- notifications ------------------------------ */
+
+export interface ApiNotification {
+  id: string;
+  category: string;
+  priority: string;
+  title: string;
+  body: string;
+  actionLabel?: string;
+  actionUrl?: string;
+  createdAt: number;
+  read: boolean;
+}
+
+export async function fetchNotifications(): Promise<{ unread: number; items: ApiNotification[] }> {
+  return getJson("/api/notifications", undefined, { headers: guestHeaders() });
+}
+
+export async function markNotificationRead(id: string): Promise<{ ok: boolean }> {
+  return getJson(`/api/notifications/${id}/read`, undefined, { method: "POST", headers: guestHeaders() });
+}
+
+export async function markAllNotificationsRead(): Promise<{ ok: boolean }> {
+  return getJson("/api/notifications/read-all", undefined, { method: "POST", headers: guestHeaders() });
+}
+
+export async function dismissNotification(id: string): Promise<{ ok: boolean }> {
+  return getJson(`/api/notifications/${id}/dismiss`, undefined, { method: "POST", headers: guestHeaders() });
+}
+
+export async function reportPlaybackIssue(input: {
+  animeId?: number;
+  episode?: number;
+  provider?: string;
+  errorCode?: string;
+  playerState?: string;
+  browser?: string;
+}): Promise<{ ok: boolean }> {
+  return getJson("/api/playback/report", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guestHeaders() },
+    body: JSON.stringify(input),
+  });
+}
