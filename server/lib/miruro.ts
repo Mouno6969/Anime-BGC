@@ -18,6 +18,46 @@ import type {
 
 const MIRURO_API_URL = (process.env.MIRURO_API_URL || "http://127.0.0.1:8788").replace(/\/$/, "");
 
+/* ------------------------- upstream response cache -------------------------
+ * The extractor's /episodes/<id> mapping call is the single most expensive
+ * upstream request (hundreds of episodes, several provider round-trips) — it
+ * is what made first-time One Piece/Bleach page loads stall for ~20s on real
+ * networks. Episode mappings change rarely, so we cache them aggressively
+ * with stale-while-revalidate: serve the cached copy instantly and refresh
+ * in the background. This drops repeat page loads to near-instant and cuts
+ * upstream load (and 429 risk) dramatically.
+ */
+interface UpstreamEntry {
+  data: unknown;
+  expires: number;
+  refreshing?: boolean;
+}
+const upstreamCache = new Map<string, UpstreamEntry>();
+const UPSTREAM_TTL_MS = 6 * 3600_000; // 6h fresh, then stale-while-revalidate
+
+async function cachedUpstream<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const hit = upstreamCache.get(key);
+  if (hit) {
+    if (hit.expires > now) return hit.data as T;
+    // stale: serve immediately, refresh in background once
+    if (!hit.refreshing) {
+      hit.refreshing = true;
+      fetcher()
+        .then((data) => upstreamCache.set(key, { data, expires: Date.now() + UPSTREAM_TTL_MS }))
+        .catch(() => undefined)
+        .finally(() => { const e = upstreamCache.get(key); if (e) e.refreshing = false; });
+    }
+    return hit.data as T;
+  }
+  const data = await fetcher();
+  upstreamCache.set(key, { data, expires: now + UPSTREAM_TTL_MS });
+  if (upstreamCache.size > 300) {
+    upstreamCache.forEach((v, k) => { if (v.expires < now - UPSTREAM_TTL_MS) upstreamCache.delete(k); });
+  }
+  return data;
+}
+
 /** Provider priority (best first), matching the frontend fallback order. */
 const PROVIDER_PRIORITY = ["ally", "pewe", "bee", "kiwi", "bonk", "moo", "hop", "zoro"];
 
@@ -37,20 +77,19 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 function normaliseEpisode(e: any): Episode {
+  // Keep only what the episode grid actually renders. Descriptions, images,
+  // air dates and AniSkip blobs made long-running shows (One Piece: 1173
+  // episodes x 7 providers) return ~8.5 MB of JSON — many seconds of download
+  // on mobile and the real cause of the long initial "loading" stall.
   return {
     id: e.id,
     number: e.number,
     title: e.title,
-    image: e.image,
-    airDate: e.airDate,
-    duration: e.duration,
-    description: e.description,
-    filler: e.filler,
   };
 }
 
 export async function getEpisodes(anilistId: number): Promise<EpisodesResult> {
-  const data = await getJson<any>(`/episodes/${anilistId}`);
+  const data = await cachedUpstream<any>(`episodes:${anilistId}`, () => getJson<any>(`/episodes/${anilistId}`));
   const providers = data?.providers ?? {};
   const orderedNames = [
     ...PROVIDER_PRIORITY.filter((p) => providers[p]),
@@ -61,7 +100,11 @@ export async function getEpisodes(anilistId: number): Promise<EpisodesResult> {
     const eps = providers[name]?.episodes ?? {};
     const sub: any[] = Array.isArray(eps.sub) ? eps.sub : [];
     const dub: any[] = Array.isArray(eps.dub) ? eps.dub : [];
-    return { provider: name, sub: sub.map(normaliseEpisode), dub: dub.map(normaliseEpisode) };
+    // byProvider copies exist only for server-switching/fallback lookups
+    // (matched by episode number to get an id) — titles are not rendered from
+    // these, so keep them minimal to keep the payload small on long shows.
+    const slim = (e: any) => ({ id: e.id, number: e.number });
+    return { provider: name, sub: sub.map(slim), dub: dub.map(slim) };
   });
 
   const chosen =
