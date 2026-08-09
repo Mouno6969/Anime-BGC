@@ -82,10 +82,14 @@ export async function handleApi(
     // Race every provider that carries this episode; first valid stream wins.
     if (path === "/api/sources/race") {
       const anilistId = num(q.get("anilistId"), 0);
-      const number = num(q.get("number"), 0);
+      // Episode numbers may legitimately be 0 (e.g. some providers number the
+      // first episode "0") or fractional (specials) — validate by finiteness,
+      // never by truthiness.
+      const numberRaw = q.get("number");
+      const number = numberRaw === null || numberRaw === "" ? NaN : Number(numberRaw);
       const category = (q.get("category") as "sub" | "dub") ?? "sub";
       const exclude = (q.get("exclude") ?? "").split(",").filter(Boolean);
-      if (!anilistId || !number) {
+      if (!anilistId || !Number.isFinite(number) || number < 0) {
         return { status: 400, body: { error: "anilistId and number are required" } };
       }
       const eps = await miruro.getEpisodes(anilistId);

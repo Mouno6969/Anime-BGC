@@ -117,8 +117,41 @@ export default function Watch() {
     const failKey = `${id}:${num0}:${category}`;
     const excluded = failState.key === failKey ? failState.excluded : [];
 
+    // Try providers one at a time; resolves true when one yields streams.
+    const tryInOrder = async (order: string[]): Promise<boolean> => {
+      for (const prov of order) {
+        const pd = eps.byProvider.find((p) => p.provider === prov);
+        if (!pd) continue;
+        const list = category === "dub" && pd.dub.length ? pd.dub : pd.sub;
+        const match = list.find((e) => e.number === num0);
+        if (!match) continue;
+        try {
+          const res = await api.sources(match.id, prov, id, category, controller.signal);
+          if (res.streams.length > 0) {
+            if (controller.signal.aborted) return true;
+            setSources(res);
+            setActiveProvider(prov);
+            setSourceLoading(false);
+            return true;
+          }
+        } catch {
+          if (controller.signal.aborted) return true;
+          // try the next provider
+        }
+      }
+      return false;
+    };
+
+    const showError = () => {
+      if (controller.signal.aborted) return;
+      setSourceError("No playable source found for this episode across providers.");
+      setSourceLoading(false);
+    };
+
     // Auto mode: race every provider in parallel — first valid stream wins,
-    // losers are aborted server-side automatically.
+    // losers are aborted server-side automatically. If the race itself fails
+    // for any reason, fall back to sequential probing so Auto still works
+    // whenever ANY single server would have.
     if (provider === "auto") {
       api
         .raceSources(id, num0, category, excluded, controller.signal)
@@ -128,41 +161,17 @@ export default function Watch() {
           setActiveProvider(res.provider);
           setSourceLoading(false);
         })
-        .catch(() => {
+        .catch(async () => {
           if (controller.signal.aborted) return;
-          setSourceError("No playable source found for this episode across providers.");
-          setSourceLoading(false);
+          const order = eps.providers.filter((p) => !excluded.includes(p));
+          if (!(await tryInOrder(order))) showError();
         });
       return () => controller.abort();
     }
 
     const order = [provider, ...eps.providers.filter((p) => p !== provider)];
-    const num = selected.number;
-
-    (async () => {
-      for (const prov of order) {
-        const pd = eps.byProvider.find((p) => p.provider === prov);
-        if (!pd) continue;
-        const list = category === "dub" && pd.dub.length ? pd.dub : pd.sub;
-        const match = list.find((e) => e.number === num);
-        if (!match) continue;
-        try {
-          const res = await api.sources(match.id, prov, id, category, controller.signal);
-          if (res.streams.length > 0) {
-            if (controller.signal.aborted) return;
-            setSources(res);
-            setActiveProvider(prov);
-            setSourceLoading(false);
-            return;
-          }
-        } catch {
-          if (controller.signal.aborted) return;
-          // try the next provider
-        }
-      }
-      if (controller.signal.aborted) return;
-      setSourceError("No playable source found for this episode across providers.");
-      setSourceLoading(false);
+    void (async () => {
+      if (!(await tryInOrder(order))) showError();
     })();
 
     return () => controller.abort();
