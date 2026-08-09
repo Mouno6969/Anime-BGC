@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 const PER_PAGE = 12;
 
 const TABS = [
-  { key: "newest", label: "Newest", fetch: api.newest },
   { key: "popular", label: "Popular", fetch: api.popular },
+  { key: "newest", label: "Newest", fetch: api.newest },
   { key: "top", label: "Top Rated", fetch: api.topRated },
 ] as const;
 
