@@ -45,7 +45,7 @@ export default function Watch() {
   });
   const [sources, setSources] = useState<SourcesResult | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("");
-  const [, setSourceLoading] = useState(false);
+  const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
 
   // Failover state, keyed by episode so it resets on episode/category change.
@@ -58,6 +58,40 @@ export default function Watch() {
   activeProviderRef.current = activeProvider;
 
   const { has, toggle } = useWatchlist();
+  const playerWrapRef = useRef<HTMLDivElement>(null);
+  const lastScrollYRef = useRef(0);
+
+  // Continuously track the user's scroll position. The browser scrolls to
+  // reveal a tapped episode button BEFORE the pointer/click handlers fire, so
+  // by the time we can react, window.scrollY is already wrong. Tracking it
+  // live gives us the true pre-tap position to restore.
+  useEffect(() => {
+    const track = () => {
+      lastScrollYRef.current = window.scrollY;
+    };
+    track();
+    window.addEventListener("scroll", track, { passive: true });
+    return () => window.removeEventListener("scroll", track);
+  }, []);
+  const scrollLockRef = useRef<{ y: number; until: number } | null>(null);
+
+  // Pin the viewport while a new episode source is fetched. Chrome's native
+  // scroll anchoring otherwise drags the page down into the comments when the
+  // player remounts mid-fetch (no programmatic scroll call is involved, so it
+  // cannot be intercepted — we pin scrollY directly instead).
+  const lockScrollFor = (ms: number) => {
+    scrollLockRef.current = { y: window.scrollY, until: Date.now() + ms };
+    const pin = () => {
+      const lock = scrollLockRef.current;
+      if (!lock || Date.now() > lock.until) {
+        scrollLockRef.current = null;
+        return;
+      }
+      if (Math.abs(window.scrollY - lock.y) > 6) window.scrollTo(0, lock.y);
+      requestAnimationFrame(pin);
+    };
+    requestAnimationFrame(pin);
+  };
 
   const providerData: ProviderEpisodes | undefined = useMemo(
     () =>
@@ -96,6 +130,22 @@ export default function Watch() {
   useEffect(() => {
     if (episodeList.length && epNumber == null) setEpNumber(episodeList[0].number);
   }, [episodeList, epNumber]);
+
+  // Freeze the player wrapper's height while a new stream loads. When the
+  // player unmounts to swap sources mid-fetch, the layout would otherwise
+  // collapse and the browser's scroll anchoring drags the viewport down into
+  // the comments section. Pinning the measured height keeps everything put.
+  useEffect(() => {
+    const el = playerWrapRef.current;
+    if (!el) return;
+    if (sourceLoading) {
+      el.style.height = `${el.getBoundingClientRect().height}px`;
+      el.style.overflow = "hidden";
+    } else {
+      el.style.height = "";
+      el.style.overflow = "";
+    }
+  }, [sourceLoading]);
 
   // reset to sub if the current provider has no dub
   useEffect(() => {
@@ -289,7 +339,9 @@ export default function Watch() {
 
         <div className="container grid gap-8 py-10 lg:grid-cols-[1fr_320px]">
           <div>
-            {/* player */}
+            {/* player — wrapper ref lets us hold the user's scroll position
+                steady while a new episode's stream is being fetched */}
+            <div ref={playerWrapRef} className="min-h-[56.25vw] sm:min-h-[400px] lg:min-h-[480px]">
             {sourceError ? (
               <ErrorState message={sourceError} />
             ) : bestSource ? (
@@ -318,6 +370,7 @@ export default function Watch() {
                 </div>
               </div>
             )}
+            </div>
 
             {/* now playing + controls */}
             {selected && (
@@ -435,7 +488,23 @@ export default function Watch() {
                   {episodeList.map((ep) => (
                     <button
                       key={`${ep.id}-${ep.number}`}
-                      onClick={() => setEpNumber(ep.number)}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setEpNumber(ep.number);
+                        // The browser scrolled the window to reveal this button
+                        // BEFORE our handlers fired — snap back to the tracked
+                        // pre-tap position and hold it while the browser retries.
+                        const y = lastScrollYRef.current;
+                        const until = Date.now() + 2600;
+                        const snap = () => {
+                          if (Date.now() <= until && Math.abs(window.scrollY - y) > 4) {
+                            window.scrollTo(0, y);
+                          }
+                        };
+                        window.addEventListener("scroll", snap, { passive: true });
+                        setTimeout(() => window.removeEventListener("scroll", snap), 2700);
+                        snap();
+                      }}
                       title={ep.title || `Episode ${ep.number}`}
                       className={cn(
                         "grid h-10 place-items-center rounded-lg border text-sm font-medium transition-colors",

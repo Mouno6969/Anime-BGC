@@ -75,7 +75,7 @@ function AvatarImg({ guestId, size = 36 }: { guestId: string; size?: number }) {
 function Composer({
   placeholder,
   initial = "",
-  autoFocus = true,
+  autoFocus = false,
   compact = false,
   onSubmit,
   onCancel,
@@ -94,7 +94,7 @@ function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (autoFocus) ref.current?.focus();
+    if (autoFocus) ref.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
   const autosize = () => {

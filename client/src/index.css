@@ -124,7 +124,10 @@
     @apply border-border outline-ring/50;
   }
   html {
-    scroll-behavior: smooth;
+    /* NOT scroll-behavior:smooth — it makes the browser smoothly animate to
+       layout-driven scroll changes, which caused the page to glide down into
+       the comments section whenever a new episode started extracting. */
+    scroll-behavior: auto;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
@@ -370,4 +373,12 @@ input[type="range"].player-range {
 
 @media (prefers-reduced-motion: reduce) {
   .avatar-glow { animation: none !important; }
+}
+
+/* Prevent the browser's scroll anchoring from dragging the viewport when the
+   player remounts to swap episode sources — the root cause of the page
+   jumping down into the comments section mid-fetch. */
+html,
+body {
+  overflow-anchor: none;
 }
