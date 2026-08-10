@@ -1,8 +1,8 @@
 /**
  * ANIME BGC — mock data + UI constants.
- * Live data now comes from the backend (see lib/api.ts). This file keeps the
- * shared `Anime` type (re-exported) plus a few static UI constants (LOGO,
- * genres, scheduleDays) and demo arrays still used as graceful fallbacks.
+ * Live data comes from the backend (see lib/api.ts). This file keeps the
+ * shared `Anime` type (re-exported) plus static UI constants (LOGO,
+ * genres, scheduleDays) and curated arrays used as graceful fallbacks.
  */
 import type { Anime as SharedAnime, MediaType as SharedMediaType } from "@shared/anime";
 export type Anime = SharedAnime;

@@ -6,7 +6,7 @@
  *   "once"    → once ever (localStorage)
  *   "always"  → every full page load
  *   "off"     → never
- * Append ?intro=1 to the URL to force a replay (demo/testing).
+ * Append ?intro=1 to the URL to force a replay.
  * Users with prefers-reduced-motion never see the intro.
  */
 

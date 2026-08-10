@@ -4,8 +4,8 @@
  * page counter + arrows (TR), bottom content block with meta chips, title,
  * genres, studio, synopsis, DETAILS + WATCH NOW.
  *
- * Live data: top trending anime from the backend (AniList). Falls back to the
- * bundled demo `featured` list if the request fails.
+ * Live data: top trending anime from the backend (AniList). Falls back to a
+ * curated `featured` list if the request fails.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
