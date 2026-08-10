@@ -1,14 +1,14 @@
 /**
- * New-user onboarding tour — progressive, skippable, resumable, versioned.
- * Shows once (per TOUR_VERSION) after the intro; completed users never see
- * it again. Bottom-sheet on mobile, centered card on desktop.
+ * Onboarding tour — progressive, skippable, versioned.
+ * Never auto-shows: opens only when the user explicitly asks for it, either
+ * via the "Take the tour" notification (bgc:start-tour event) or ?tour=1.
+ * Bottom-sheet on mobile, centered card on desktop.
  */
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
 import {
   TOUR_STEPS,
   finishOnboarding,
-  getOnboarding,
   setOnboardingStep,
   startOnboarding,
 } from "@/lib/onboarding";
@@ -19,23 +19,25 @@ export default function OnboardingTour() {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    // Never interrupt the admin panel with the user tour.
+    // Explicit opt-in only — the tour never opens on its own.
     if (window.location.pathname.startsWith("/admin")) return;
-    const state = getOnboarding();
-    if (state?.status === "in-progress") {
-      setStep(state.step);
+    const open = () => {
+      startOnboarding();
+      setStep(0);
       setVisible(true);
-      return;
+    };
+    // ?tour=1 deep-link
+    try {
+      if (new URLSearchParams(window.location.search).get("tour") === "1") {
+        open();
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch {
+      /* ignore */
     }
-    if (!state) {
-      // brand-new visitor: start after the intro has had its moment
-      const t = setTimeout(() => {
-        startOnboarding();
-        setStep(0);
-        setVisible(true);
-      }, 900);
-      return () => clearTimeout(t);
-    }
+    // "Take the tour" notification action
+    window.addEventListener("bgc:start-tour", open);
+    return () => window.removeEventListener("bgc:start-tour", open);
   }, []);
 
   if (!visible) return null;

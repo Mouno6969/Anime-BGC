@@ -88,7 +88,12 @@ export default function NotificationCenter({ open, onClose }: { open: boolean; o
     );
     if (n.actionUrl) {
       onClose();
-      setLocation(n.actionUrl);
+      if (n.actionUrl.includes("tour=1")) {
+        // Special action: launch the onboarding tour instead of navigating.
+        window.dispatchEvent(new Event("bgc:start-tour"));
+      } else {
+        setLocation(n.actionUrl);
+      }
     }
   };
 

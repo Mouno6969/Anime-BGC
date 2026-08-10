@@ -91,9 +91,9 @@ function seed() {
       category: "welcome",
       priority: "info",
       title: "Welcome to AnimeBGC",
-      body: "Here's how to get the most out of AnimeBGC — discover, watch, and keep track of the anime you love.",
-      actionLabel: "Browse trending",
-      actionUrl: "/",
+      body: "Here's how to get the most out of AnimeBGC — discover, watch, and keep track of the anime you love. New here? Take the quick tour.",
+      actionLabel: "Take the tour",
+      actionUrl: "/?tour=1",
       expiresAt: null,
     },
     {
