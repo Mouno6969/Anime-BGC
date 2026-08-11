@@ -337,8 +337,8 @@ export default function Watch() {
           </div>
         </section>
 
-        <div className="container grid gap-8 py-10 lg:grid-cols-[1fr_320px]">
-          <div>
+        <div className="container grid grid-cols-1 gap-8 py-10 lg:grid-cols-[1fr_320px]">
+          <div className="min-w-0">
             {/* player — wrapper ref lets us hold the user's scroll position
                 steady while a new episode's stream is being fetched */}
             <div ref={playerWrapRef} className="min-h-[56.25vw] sm:min-h-[400px] lg:min-h-[480px]">
@@ -462,7 +462,7 @@ export default function Watch() {
           </div>
 
           {/* episodes list */}
-          <aside>
+          <aside className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-lg font-bold">Episodes</h3>
               {eps?.provider && (
